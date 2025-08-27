@@ -1,7 +1,7 @@
 # CyberSecurity
 Just some scripts for Cyber Security purposes. Mainly Python.
 
-1. Traffic Monitor Pro (Windows 11)
+1. Traffic Monitor (Windows 11)
 
 Live, local network anomaly monitor for Windows 11 with a real-time UI, baseline learning, heuristics, packet snapshots (PCAP for Wireshark), TLS JA3 fingerprints, DNS parsing, optional OSINT enrichment (AbuseIPDB, AlienVault OTX, GreyNoise), and startup API key self-test.
 
