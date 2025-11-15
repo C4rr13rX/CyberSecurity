@@ -377,13 +377,29 @@ void printDarkWebResult(const antivirus::DarkWebScanResult &result) {
     if (result.findings.empty()) {
         std::cout << "[+] No keyword hits detected in retrieved content.\n";
     } else {
-        std::cout << "[!] Potential exposure detected for " << result.findings.size() << " keyword(s):\n";
+        std::cout << "[!] Potential exposure detected for " << result.findings.size() << " artefact(s):\n";
         for (const auto &finding : result.findings) {
-            std::cout << "    - " << finding.keyword << " -> " << finding.context << "\n";
+            std::cout << "    - " << finding.keyword;
+            if (!finding.matchType.empty()) {
+                std::cout << " [" << finding.matchType << "]";
+            }
+            if (finding.confidence > 0.0) {
+                std::cout << " (confidence " << std::fixed << std::setprecision(2) << finding.confidence << ")";
+                std::cout << std::defaultfloat;
+            }
+            if (finding.lineNumber > 0) {
+                std::cout << " line " << finding.lineNumber;
+            }
+            std::cout << " -> " << finding.context << "\n";
         }
     }
     if (!result.responseSnippet.empty()) {
         std::cout << "--- snippet ---\n" << result.responseSnippet << "\n--------------\n";
+    }
+    if (result.statusCode > 0) {
+        std::cout << "[*] HTTP status: " << result.statusCode << ", bytes: " << result.bytesTransferred
+                  << ", elapsed: " << std::fixed << std::setprecision(2) << result.elapsedSeconds << "s\n";
+        std::cout << std::defaultfloat;
     }
 }
 

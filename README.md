@@ -17,7 +17,7 @@ This repository now bundles a native "Paranoid" host-defense toolkit together wi
 * **Threat intelligence fusion** – load or append IP/hash/domain indicators (`--threat-intel-*`) so the heuristic engine can surface real-time matches against live sockets, environment variables, and binary hashes.
 * **Integrity and ransomware defenses** – baseline trusted directories (`--integrity-baseline`), verify drift (`--integrity-verify`), and watch hot directories for ransomware-style bursts (`--ransomware-watch`).
 * **Containment tooling** – isolate artefacts with `--quarantine-file`, terminate rogue processes with `--quarantine-pid` / `--kill-pid`, and feed the results back into hunting.
-* **Dark web reconnaissance (experimental)** – point the suite at a Tor SOCKS proxy (`--tor-proxy`) and query onion services for leaked keywords via `--darkweb-scan`.
+* **Dark web reconnaissance (experimental)** – point the suite at a Tor SOCKS proxy (`--tor-proxy`) and query onion services for leaked keywords via `--darkweb-scan`. The scanner now parses structured leaks (emails, credential pairs, SSNs, street addresses, license plates, card numbers, and phone numbers), decodes Base64 blobs that hide search terms, follows simple redirects, and records HTTP timing metrics to help prioritise high-signal responses.
 
 ### Build
 
@@ -73,6 +73,7 @@ OPENAI_API_KEY=sk-... ./paranoid_av --openai /tmp/suspicious_script.sh
 
 # query a dark-web onion for leaked credentials (Tor proxy must be listening on localhost:9050)
 ./paranoid_av --tor-proxy 9050 --darkweb-scan exampleonion.onion /search "your-company.com,password"
+# the scanner extracts keyword hits, structured data like SSNs, and Base64-encoded leaks while reporting HTTP status and latency
 ```
 
 Tips:
