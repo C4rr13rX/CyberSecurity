@@ -115,6 +115,9 @@ std::vector<SystemFinding> SystemInspector::scanAll() const {
     scanSetuidBinaries(findings);
     scanLdPreload(findings);
     scanPrivilegedAccounts(findings);
+    scanAutostartEntries(findings);
+    scanSudoers(findings);
+    scanSshConfig(findings);
     return findings;
 }
 
@@ -334,6 +337,105 @@ void SystemInspector::scanPrivilegedAccounts(std::vector<SystemFinding> &finding
         if (uid == 0 && isSuspiciousPath(home)) {
             addFinding(findings, "Account",
                        "Root-level account " + username + " home directory in writable path: " + home, 7.0, "T1036");
+        }
+    }
+}
+
+void SystemInspector::scanAutostartEntries(std::vector<SystemFinding> &findings) const {
+    std::error_code ec;
+    fs::path homeRoot("/home");
+    if (!fs::exists(homeRoot, ec)) {
+        return;
+    }
+
+    for (const auto &home : fs::directory_iterator(homeRoot, fs::directory_options::skip_permission_denied, ec)) {
+        if (ec) {
+            ec.clear();
+            continue;
+        }
+        if (!home.is_directory(ec)) {
+            continue;
+        }
+        const auto autostart = home.path() / ".config/autostart";
+        if (!fs::exists(autostart, ec) || !fs::is_directory(autostart, ec)) {
+            continue;
+        }
+        for (const auto &entry : fs::directory_iterator(autostart, fs::directory_options::skip_permission_denied, ec)) {
+            if (ec) {
+                ec.clear();
+                continue;
+            }
+            if (!entry.is_regular_file(ec)) {
+                continue;
+            }
+            std::ifstream file(entry.path());
+            if (!file.is_open()) {
+                continue;
+            }
+            std::string line;
+            while (std::getline(file, line)) {
+                line = trim(line);
+                if (line.rfind("Exec=", 0) == 0) {
+                    const auto command = line.substr(5);
+                    if (isSuspiciousPath(command)) {
+                        addFinding(findings, "Autostart", "Writable autostart entry executes " + command, 7.5, "T1060");
+                    }
+                }
+            }
+        }
+    }
+}
+
+void SystemInspector::scanSudoers(std::vector<SystemFinding> &findings) const {
+    const auto analyzeFile = [&](const fs::path &path) {
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            return;
+        }
+        std::string line;
+        while (std::getline(file, line)) {
+            const auto trimmed = trim(line);
+            if (trimmed.empty() || trimmed[0] == '#') {
+                continue;
+            }
+            if (trimmed.find("NOPASSWD") != std::string::npos) {
+                addFinding(findings, "Sudoers", "NOPASSWD entry detected in " + path.string(), 7.0, "T1548");
+            }
+        }
+    };
+
+    analyzeFile("/etc/sudoers");
+    std::error_code ec;
+    const fs::path sudoersDir("/etc/sudoers.d");
+    if (fs::exists(sudoersDir, ec) && fs::is_directory(sudoersDir, ec)) {
+        for (const auto &entry : fs::directory_iterator(sudoersDir, fs::directory_options::skip_permission_denied, ec)) {
+            if (ec) {
+                ec.clear();
+                continue;
+            }
+            if (entry.is_regular_file(ec)) {
+                analyzeFile(entry.path());
+            }
+        }
+    }
+}
+
+void SystemInspector::scanSshConfig(std::vector<SystemFinding> &findings) const {
+    std::ifstream file("/etc/ssh/sshd_config");
+    if (!file.is_open()) {
+        return;
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        const auto trimmed = trim(line);
+        if (trimmed.empty() || trimmed[0] == '#') {
+            continue;
+        }
+        if (trimmed.find("PermitRootLogin") == 0 && trimmed.find("yes") != std::string::npos) {
+            addFinding(findings, "SSH", "PermitRootLogin enabled in sshd_config", 6.5, "T1021");
+        }
+        if (trimmed.find("PasswordAuthentication") == 0 && trimmed.find("yes") != std::string::npos) {
+            addFinding(findings, "SSH", "Password authentication enabled in sshd_config", 5.0, "M1032");
         }
     }
 }

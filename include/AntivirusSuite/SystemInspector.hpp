@@ -22,6 +22,9 @@ class SystemInspector {
     void scanSetuidBinaries(std::vector<SystemFinding> &findings) const;
     void scanLdPreload(std::vector<SystemFinding> &findings) const;
     void scanPrivilegedAccounts(std::vector<SystemFinding> &findings) const;
+    void scanAutostartEntries(std::vector<SystemFinding> &findings) const;
+    void scanSudoers(std::vector<SystemFinding> &findings) const;
+    void scanSshConfig(std::vector<SystemFinding> &findings) const;
 
     static bool isSuspiciousPath(const std::string &path);
 };

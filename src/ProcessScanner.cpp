@@ -14,6 +14,7 @@
 #include <pwd.h>
 #include <sstream>
 #include <stdexcept>
+#include <sys/stat.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -130,6 +131,10 @@ std::vector<ProcessInfo> ProcessScanner::snapshotProcesses() const {
         info.cwd = readLink(basePath + "/cwd");
         if (!info.exePath.empty()) {
             info.exeHash = crypto::sha256File(info.exePath);
+            info.exeWorldWritable = isWorldWritable(info.exePath);
+        }
+        if (!info.cwd.empty()) {
+            info.cwdWorldWritable = isWorldWritable(info.cwd);
         }
         info.metadata["VmRSS"] = readStatusValue(statusContent, "VmRSS");
         info.metadata["Threads"] = readStatusValue(statusContent, "Threads");
@@ -378,6 +383,18 @@ std::unordered_map<std::string, std::string> ProcessScanner::parseEnvironment(co
     }
 
     return environment;
+}
+
+bool ProcessScanner::isWorldWritable(const std::string &path) {
+    if (path.empty()) {
+        return false;
+    }
+    struct stat buffer {
+    };
+    if (stat(path.c_str(), &buffer) != 0) {
+        return false;
+    }
+    return (buffer.st_mode & S_IWOTH) != 0;
 }
 
 } // namespace antivirus

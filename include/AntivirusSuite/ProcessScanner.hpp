@@ -50,8 +50,11 @@ struct ProcessInfo {
     std::vector<MemoryRegion> memoryRegions;
     double riskScore{0.0};
     std::vector<HeuristicFinding> heuristics;
+    std::vector<std::string> threatIntelHits;
     std::unordered_map<std::string, std::string> metadata;
     std::unordered_map<std::string, std::string> environment;
+    bool exeWorldWritable{false};
+    bool cwdWorldWritable{false};
 };
 
 class ProcessScanner {
@@ -70,6 +73,7 @@ class ProcessScanner {
     static std::vector<MemoryRegion> parseMemoryRegions(const std::string &basePath);
     static std::vector<std::string> parseCapabilities(const std::string &hexMask);
     static std::unordered_map<std::string, std::string> parseEnvironment(const std::string &path);
+    static bool isWorldWritable(const std::string &path);
 };
 
 } // namespace antivirus

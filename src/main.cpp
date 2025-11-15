@@ -1,8 +1,14 @@
+#include "AntivirusSuite/DarkWebScanner.hpp"
+#include "AntivirusSuite/FileIntegrityMonitor.hpp"
 #include "AntivirusSuite/HeuristicAnalyzer.hpp"
 #include "AntivirusSuite/OpenAIAnalyzer.hpp"
 #include "AntivirusSuite/ProcessScanner.hpp"
+#include "AntivirusSuite/QuarantineManager.hpp"
+#include "AntivirusSuite/RansomwareMonitor.hpp"
 #include "AntivirusSuite/SignatureScanner.hpp"
 #include "AntivirusSuite/SystemInspector.hpp"
+#include "AntivirusSuite/ThreatIntel.hpp"
+#include "AntivirusSuite/TorClient.hpp"
 #include "AntivirusSuite/YaraScanner.hpp"
 
 #include <chrono>
@@ -10,8 +16,10 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <thread>
+#include <utility>
 
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
@@ -67,6 +75,18 @@ std::string jsonEscape(const std::string &value) {
         }
     }
     return oss.str();
+}
+
+std::vector<std::string> splitComma(const std::string &value) {
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream stream(value);
+    while (std::getline(stream, token, ',')) {
+        if (!token.empty()) {
+            tokens.push_back(token);
+        }
+    }
+    return tokens;
 }
 
 void printProcessReportTable(const std::vector<antivirus::ProcessInfo> &processes) {
@@ -143,6 +163,15 @@ void printProcessReportDetailed(const std::vector<antivirus::ProcessInfo> &proce
                 std::cout << "\n";
             }
         }
+        if (!proc.threatIntelHits.empty()) {
+            std::cout << "   threat-intel hits: " << joinVector(proc.threatIntelHits) << "\n";
+        }
+        if (proc.exeWorldWritable) {
+            std::cout << "   [!] executable world-writable" << "\n";
+        }
+        if (proc.cwdWorldWritable) {
+            std::cout << "   [!] working directory world-writable" << "\n";
+        }
         std::cout << "\n";
     }
 }
@@ -185,6 +214,16 @@ void printProcessReportJson(const std::vector<antivirus::ProcessInfo> &processes
             std::cout << "\n";
         }
         std::cout << "    ],\n";
+        std::cout << "    \"threatIntelHits\": [";
+        for (std::size_t t = 0; t < proc.threatIntelHits.size(); ++t) {
+            if (t > 0) {
+                std::cout << ",";
+            }
+            std::cout << "\"" << jsonEscape(proc.threatIntelHits[t]) << "\"";
+        }
+        std::cout << "],\n";
+        std::cout << "    \"exeWorldWritable\": " << (proc.exeWorldWritable ? "true" : "false") << ",\n";
+        std::cout << "    \"cwdWorldWritable\": " << (proc.cwdWorldWritable ? "true" : "false") << ",\n";
         std::cout << "    \"connections\": [\n";
         for (std::size_t c = 0; c < proc.connections.size(); ++c) {
             const auto &conn = proc.connections[c];
@@ -295,13 +334,78 @@ void printSystemFindings(const std::vector<antivirus::SystemFinding> &findings) 
     }
 }
 
+void printFileIntegrityReport(const antivirus::FileIntegrityReport &report) {
+    if (report.missing.empty() && report.added.empty() && report.modified.empty()) {
+        std::cout << "[+] Integrity verification succeeded. Baseline " << report.baselinePath
+                  << " matches current state.\n";
+        return;
+    }
+
+    for (const auto &finding : report.missing) {
+        std::cout << "[!] Missing file: " << finding.path << " -> " << finding.issue << "\n";
+    }
+    for (const auto &finding : report.modified) {
+        std::cout << "[!] Modified file: " << finding.path << " -> " << finding.issue << "\n";
+    }
+    for (const auto &finding : report.added) {
+        std::cout << "[i] New file: " << finding.path << " -> " << finding.issue << "\n";
+    }
+}
+
+void printRansomwareSummary(const antivirus::RansomwareSummary &summary) {
+    std::cout << "[*] Ransomware monitor observed " << summary.totalEvents << " filesystem events";
+    if (summary.suspectedEncryptions > 0) {
+        std::cout << ", " << summary.suspectedEncryptions << " suspicious encryptions";
+    }
+    std::cout << ".\n";
+    for (const auto &finding : summary.findings) {
+        std::cout << "    - " << finding.path << ": " << finding.description << "\n";
+    }
+    if (summary.highRisk()) {
+        std::cout << "[!] High probability of ransomware behavior detected." << std::endl;
+    } else {
+        std::cout << "[+] No ransomware surge detected." << std::endl;
+    }
+}
+
+void printDarkWebResult(const antivirus::DarkWebScanResult &result) {
+    if (!result.success) {
+        std::cout << "[!] Dark web scan did not complete: " << result.errorMessage << "\n";
+        return;
+    }
+
+    if (result.findings.empty()) {
+        std::cout << "[+] No keyword hits detected in retrieved content.\n";
+    } else {
+        std::cout << "[!] Potential exposure detected for " << result.findings.size() << " keyword(s):\n";
+        for (const auto &finding : result.findings) {
+            std::cout << "    - " << finding.keyword << " -> " << finding.context << "\n";
+        }
+    }
+    if (!result.responseSnippet.empty()) {
+        std::cout << "--- snippet ---\n" << result.responseSnippet << "\n--------------\n";
+    }
+}
+
 void usage(const std::string &program) {
     std::cout << "Usage: " << program << " [options]\n"
               << "  --monitor                 Perform process inventory and heuristic analysis\n"
               << "  --monitor-loop <seconds>  Continuously monitor processes\n"
               << "  --json                    Emit monitor output as JSON\n"
               << "  --detailed                Emit verbose monitor report\n"
+              << "  --threat-intel-load <file> Load threat intelligence indicators\n"
+              << "  --threat-intel-add <type> <value> Append indicator to in-memory set\n"
+              << "  --threat-intel-save <file> Persist current indicators\n"
               << "  --system-audit            Run host persistence, module, and privilege hygiene checks\n"
+              << "  --integrity-baseline <path> <baseline>  Generate file baseline for path\n"
+              << "  --integrity-verify <path> <baseline>   Compare filesystem state to baseline\n"
+              << "  --ransomware-watch <path> <seconds>    Observe filesystem activity for encryption\n"
+              << "  --quarantine-file <path>  Move a file into quarantine\n"
+              << "  --quarantine-pid <pid>    Send SIGTERM to process for containment\n"
+              << "  --kill-pid <pid>          Force terminate process with SIGKILL\n"
+              << "  --tor-proxy <port>        Override Tor SOCKS proxy port (default 9050)\n"
+              << "  --darkweb-port <port>     Override onion service port (default 80)\n"
+              << "  --darkweb-scan <host> <path> <keywords>  Query onion service via Tor for leaks\n"
               << "  --scan <path>             Run ClamAV signature scan on path\n"
               << "  --yara <rules> <path>     Execute YARA scan against path using rules\n"
               << "  --openai <path>           Submit file to OpenAI-assisted analysis\n"
@@ -332,9 +436,18 @@ int main(int argc, char *argv[]) {
     antivirus::OpenAIAnalyzer aiAnalyzer;
     antivirus::YaraScanner yaraScanner;
     antivirus::SystemInspector systemInspector;
+    antivirus::ThreatIntelDatabase threatIntel;
+    antivirus::FileIntegrityMonitor integrityMonitor;
+    antivirus::RansomwareMonitor ransomwareMonitor;
+    antivirus::QuarantineManager quarantineManager;
+
+    heuristics.setThreatIntel(&threatIntel);
 
     bool jsonOutput = false;
     bool detailedOutput = false;
+    std::optional<std::string> threatIntelPath;
+    int torProxyPort = 9050;
+    std::uint16_t darkWebPort = 80;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -353,11 +466,53 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        if (arg == "--threat-intel-load") {
+            if (i + 1 >= argc) {
+                std::cerr << "--threat-intel-load requires a file path" << std::endl;
+                return 1;
+            }
+            const std::string path = argv[++i];
+            threatIntel.loadFromFile(path);
+            threatIntelPath = path;
+            std::cout << "[*] Loaded threat intelligence indicators from " << path << "\n";
+            continue;
+        }
+
+        if (arg == "--threat-intel-add") {
+            if (i + 2 >= argc) {
+                std::cerr << "--threat-intel-add requires a type and value" << std::endl;
+                return 1;
+            }
+            const std::string type = argv[++i];
+            const std::string value = argv[++i];
+            threatIntel.addIndicator(type, value);
+            std::cout << "[*] Added indicator " << type << ':' << value << "\n";
+            continue;
+        }
+
+        if (arg == "--threat-intel-save") {
+            if (i + 1 >= argc) {
+                if (!threatIntelPath) {
+                    std::cerr << "--threat-intel-save requires a file path when no prior load" << std::endl;
+                    return 1;
+                }
+                threatIntel.saveToFile(*threatIntelPath);
+                std::cout << "[*] Saved threat intelligence to " << *threatIntelPath << "\n";
+            } else {
+                const std::string path = argv[++i];
+                threatIntel.saveToFile(path);
+                threatIntelPath = path;
+                std::cout << "[*] Saved threat intelligence to " << path << "\n";
+            }
+            continue;
+        }
+
         if (arg == "--monitor") {
             auto processes = processScanner.snapshotProcesses();
             for (auto &process : processes) {
                 const auto report = heuristics.analyze(process);
                 process.heuristics = report.findings;
+                process.threatIntelHits = report.threatIntelHits;
                 process.riskScore = report.score;
             }
             printProcessReport(processes, jsonOutput, detailedOutput);
@@ -367,6 +522,132 @@ int main(int argc, char *argv[]) {
         if (arg == "--system-audit") {
             const auto findings = systemInspector.scanAll();
             printSystemFindings(findings);
+            continue;
+        }
+
+        if (arg == "--integrity-baseline") {
+            if (i + 2 >= argc) {
+                std::cerr << "--integrity-baseline requires a root path and baseline file" << std::endl;
+                return 1;
+            }
+            const std::string rootPath = argv[++i];
+            const std::string baseline = argv[++i];
+            try {
+                integrityMonitor.createBaseline(rootPath, baseline);
+                std::cout << "[+] Baseline created at " << baseline << " for " << rootPath << "\n";
+            } catch (const std::exception &ex) {
+                std::cerr << "Failed to create baseline: " << ex.what() << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--integrity-verify") {
+            if (i + 2 >= argc) {
+                std::cerr << "--integrity-verify requires a root path and baseline file" << std::endl;
+                return 1;
+            }
+            const std::string rootPath = argv[++i];
+            const std::string baseline = argv[++i];
+            try {
+                const auto report = integrityMonitor.verifyBaseline(rootPath, baseline);
+                printFileIntegrityReport(report);
+            } catch (const std::exception &ex) {
+                std::cerr << "Failed to verify baseline: " << ex.what() << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--ransomware-watch") {
+            if (i + 2 >= argc) {
+                std::cerr << "--ransomware-watch requires a path and duration" << std::endl;
+                return 1;
+            }
+            const std::string watchPath = argv[++i];
+            const int seconds = std::stoi(argv[++i]);
+            try {
+                const auto summary = ransomwareMonitor.watch(watchPath, std::chrono::seconds(seconds));
+                printRansomwareSummary(summary);
+            } catch (const std::exception &ex) {
+                std::cerr << "Ransomware monitor failed: " << ex.what() << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--quarantine-file") {
+            if (i + 1 >= argc) {
+                std::cerr << "--quarantine-file requires a path" << std::endl;
+                return 1;
+            }
+            const std::string target = argv[++i];
+            try {
+                const auto quarantined = quarantineManager.quarantineFile(target);
+                std::cout << "[!] Moved to quarantine: " << quarantined << "\n";
+            } catch (const std::exception &ex) {
+                std::cerr << "Failed to quarantine file: " << ex.what() << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--quarantine-pid" || arg == "--kill-pid") {
+            if (i + 1 >= argc) {
+                std::cerr << arg << " requires a PID" << std::endl;
+                return 1;
+            }
+            const int pid = std::stoi(argv[++i]);
+            const bool force = (arg == "--kill-pid");
+            if (quarantineManager.terminateProcess(pid, force)) {
+                std::cout << "[!] Sent " << (force ? "SIGKILL" : "SIGTERM") << " to PID " << pid << "\n";
+            } else {
+                std::cerr << "Failed to signal PID " << pid << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--tor-proxy") {
+            if (i + 1 >= argc) {
+                std::cerr << "--tor-proxy requires a port" << std::endl;
+                return 1;
+            }
+            torProxyPort = std::stoi(argv[++i]);
+            continue;
+        }
+
+        if (arg == "--darkweb-port") {
+            if (i + 1 >= argc) {
+                std::cerr << "--darkweb-port requires a port" << std::endl;
+                return 1;
+            }
+            darkWebPort = static_cast<std::uint16_t>(std::stoi(argv[++i]));
+            continue;
+        }
+
+        if (arg == "--darkweb-scan") {
+            if (i + 3 >= argc) {
+                std::cerr << "--darkweb-scan requires host, path, and comma-separated keywords" << std::endl;
+                return 1;
+            }
+            const std::string host = argv[++i];
+            const std::string path = argv[++i];
+            const std::string keywordsArg = argv[++i];
+            const auto keywords = splitComma(keywordsArg);
+            if (keywords.empty()) {
+                std::cerr << "Provide at least one keyword for --darkweb-scan" << std::endl;
+                return 1;
+            }
+            try {
+                antivirus::TorClient torClient("127.0.0.1", static_cast<std::uint16_t>(torProxyPort));
+                antivirus::DarkWebScanner scanner(std::move(torClient));
+                const auto result = scanner.scan(host, path, keywords, darkWebPort);
+                printDarkWebResult(result);
+            } catch (const std::exception &ex) {
+                std::cerr << "Dark web scan failed: " << ex.what() << std::endl;
+                return 1;
+            }
             continue;
         }
 
@@ -382,6 +663,7 @@ int main(int argc, char *argv[]) {
                 for (auto &process : processes) {
                     const auto report = heuristics.analyze(process);
                     process.heuristics = report.findings;
+                    process.threatIntelHits = report.threatIntelHits;
                     process.riskScore = report.score;
                 }
                 printProcessReport(processes, jsonOutput, detailedOutput);

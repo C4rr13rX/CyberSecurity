@@ -132,6 +132,10 @@ bool HeuristicAnalyzer::isExternalAddress(const std::string &address) {
     return !isPrivateIPv6(address);
 }
 
+void HeuristicAnalyzer::setThreatIntel(const ThreatIntelDatabase *database) {
+    threatIntel = database;
+}
+
 HeuristicReport HeuristicAnalyzer::analyze(const ProcessInfo &process) const {
     HeuristicReport report;
 
@@ -141,6 +145,14 @@ HeuristicReport HeuristicAnalyzer::analyze(const ProcessInfo &process) const {
 
     if (!process.exePath.empty() && hasSuspiciousPrefix(process.exePath)) {
         addFinding(report, "Executable running from temporary location: " + process.exePath, 7.0, "T1055");
+    }
+
+    if (process.exeWorldWritable) {
+        addFinding(report, "Executable permissions allow world-write access: " + process.exePath, 9.0, "T1222");
+    }
+
+    if (process.cwdWorldWritable && !process.cwd.empty()) {
+        addFinding(report, "Process working directory is world-writable: " + process.cwd, 7.5, "T1222");
     }
 
     if (!process.exePath.empty() && process.exePath.find("(deleted)") != std::string::npos) {
@@ -179,6 +191,11 @@ HeuristicReport HeuristicAnalyzer::analyze(const ProcessInfo &process) const {
         addFinding(report, "Executable hash unavailable (binary may be transient or unreadable).", 4.0, "T1105");
     }
 
+    if (threatIntel && !process.exeHash.empty() && threatIntel->hasHash(process.exeHash)) {
+        report.threatIntelHits.push_back("hash:" + process.exeHash);
+        addFinding(report, "Binary hash present in threat intelligence feed.", 9.5, "T1608");
+    }
+
     const auto tracerIt = process.metadata.find("TracerPid");
     if (tracerIt != process.metadata.end() && !tracerIt->second.empty() && tracerIt->second != "0") {
         addFinding(report, "Process is being traced by PID " + tracerIt->second, 5.5, "T1055");
@@ -206,7 +223,23 @@ HeuristicReport HeuristicAnalyzer::analyze(const ProcessInfo &process) const {
         if (isExternalAddress(remoteHost)) {
             addFinding(report, "External network connection to " + remoteHost + ':' + std::to_string(connection.remote.port) +
                                  " via " + connection.protocol, 6.0, "T1041");
+            if (threatIntel && threatIntel->hasIp(remoteHost)) {
+                report.threatIntelHits.push_back("ip:" + remoteHost);
+                addFinding(report, "Connection to known malicious indicator: " + remoteHost, 10.0, "T1071");
+            }
             break;
+        }
+    }
+
+    if (threatIntel) {
+        for (const auto &[key, value] : process.environment) {
+            if (value.empty()) {
+                continue;
+            }
+            if (threatIntel->hasDomain(value)) {
+                report.threatIntelHits.push_back("domain:" + value);
+                addFinding(report, "Environment variable contains malicious domain: " + key + '=' + value, 8.5, "T1059");
+            }
         }
     }
 

@@ -14,6 +14,12 @@ add_executable(paranoid_av
     src/Crypto.cpp
     src/YaraScanner.cpp
     src/SystemInspector.cpp
+    src/ThreatIntel.cpp
+    src/FileIntegrityMonitor.cpp
+    src/RansomwareMonitor.cpp
+    src/QuarantineManager.cpp
+    src/TorClient.cpp
+    src/DarkWebScanner.cpp
 )
 
 target_include_directories(paranoid_av PRIVATE include)
