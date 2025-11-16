@@ -41,6 +41,37 @@ export interface DarkwebHit {
   source?: string;
 }
 
+export interface FirewallProfileStatus {
+  profile: string;
+  enabled: boolean;
+  inboundAction?: string;
+  outboundAction?: string;
+}
+
+export interface FirewallRuleInfo {
+  name: string;
+  direction: string;
+  action: string;
+  protocol: string;
+  applications: string[];
+  ports: number[];
+}
+
+export interface FirewallStatus {
+  nativeSupport: boolean;
+  profiles: FirewallProfileStatus[];
+  rules: FirewallRuleInfo[];
+  diagnostics: string[];
+}
+
+export interface SecurityCenterProduct {
+  name: string;
+  type: string;
+  state: string;
+  path?: string;
+  isDefault?: boolean;
+}
+
 export interface WindowsVersionInfo {
   productName: string;
   manifestKey: string;
@@ -109,6 +140,12 @@ export class BackendService {
 
   private windowsStage = new BehaviorSubject<WindowsRepairStageSummary | null>(null);
   readonly windowsStage$ = this.windowsStage.asObservable();
+
+  private firewallStatus = new BehaviorSubject<FirewallStatus | null>(null);
+  readonly firewallStatus$ = this.firewallStatus.asObservable();
+
+  private securityProducts = new BehaviorSubject<SecurityCenterProduct[]>([]);
+  readonly securityCenterProducts$ = this.securityProducts.asObservable();
 
   private activeStreamToken?: string;
   private removeListener?: () => void;
@@ -196,6 +233,53 @@ export class BackendService {
   async deployUsbScanner(request: { device: string; workdir?: string; includeTor?: boolean }): Promise<void> {
     const response = await this.invoke('command:usb-build', request);
     this.emitLog(response?.log ?? 'USB build triggered.');
+  }
+
+  async refreshFirewallStatus(): Promise<void> {
+    const response = await this.invoke('command:firewall-status');
+    this.firewallStatus.next((response?.status as FirewallStatus) ?? null);
+    this.emitLog(response?.log ?? 'Firewall status refreshed.');
+  }
+
+  async addFirewallApplication(request: { path: string; label?: string; direction?: string }): Promise<void> {
+    const response = await this.invoke('command:firewall-allow-app', request);
+    this.emitLog(response?.log ?? 'Firewall application rule submitted.');
+    await this.refreshFirewallStatus();
+  }
+
+  async addFirewallPort(request: { port: number; protocol?: string; direction?: string; label?: string }): Promise<void> {
+    const response = await this.invoke('command:firewall-allow-port', request);
+    this.emitLog(response?.log ?? 'Firewall port rule submitted.');
+    await this.refreshFirewallStatus();
+  }
+
+  async loadFirewallPolicy(path: string): Promise<void> {
+    const response = await this.invoke('command:firewall-policy-load', { path });
+    this.emitLog(response?.log ?? 'Firewall policy loaded.');
+    await this.refreshFirewallStatus();
+  }
+
+  async saveFirewallPolicy(path: string): Promise<void> {
+    const response = await this.invoke('command:firewall-policy-save', { path });
+    this.emitLog(response?.log ?? 'Firewall policy saved.');
+  }
+
+  async removeFirewallRule(name: string): Promise<void> {
+    const response = await this.invoke('command:firewall-remove-rule', { name });
+    this.emitLog(response?.log ?? 'Firewall rule removal requested.');
+    await this.refreshFirewallStatus();
+  }
+
+  async refreshSecurityCenterStatus(): Promise<void> {
+    const response = await this.invoke('command:security-center-status');
+    this.securityProducts.next((response?.products as SecurityCenterProduct[]) ?? []);
+    this.emitLog(response?.log ?? 'Windows Security Center status refreshed.');
+  }
+
+  async registerSecurityCenter(request: { name: string; path: string; reporting?: string; guid?: string; mode?: string }): Promise<void> {
+    const response = await this.invoke('command:security-center-register', request);
+    this.emitLog(response?.log ?? 'Security Center registration attempted.');
+    await this.refreshSecurityCenterStatus();
   }
 
   async detectWindowsVersion(): Promise<void> {

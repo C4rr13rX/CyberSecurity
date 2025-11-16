@@ -23,6 +23,8 @@ add_executable(paranoid_av
     src/RootkitDetector.cpp
     src/USBDeployer.cpp
     src/WindowsRepairManager.cpp
+    src/FirewallManager.cpp
+    src/WindowsSecurityCenterBridge.cpp
 )
 
 target_include_directories(paranoid_av PRIVATE include)
@@ -31,6 +33,10 @@ target_compile_options(paranoid_av PRIVATE -Wall -Wextra -Wpedantic)
 
 find_package(Threads REQUIRED)
 target_link_libraries(paranoid_av PRIVATE Threads::Threads)
+
+if(WIN32)
+    target_link_libraries(paranoid_av PRIVATE wscapi ole32 advapi32)
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS paranoid_av RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

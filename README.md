@@ -19,6 +19,8 @@ This repository now bundles a native "Paranoid" host-defense toolkit together wi
 * **Integrity and ransomware defenses** – baseline trusted directories (`--integrity-baseline`), verify drift (`--integrity-verify`), and watch hot directories for ransomware-style bursts (`--ransomware-watch`).
 * **Containment tooling** – isolate artefacts with `--quarantine-file`, terminate rogue processes with `--quarantine-pid` / `--kill-pid`, and feed the results back into hunting.
 * **Dark web reconnaissance (experimental)** – point the suite at a Tor SOCKS proxy (`--tor-proxy`) and query onion services for leaked keywords via `--darkweb-scan`. The scanner now parses structured leaks (emails, credential pairs, SSNs, street addresses, license plates, card numbers, and phone numbers), decodes Base64 blobs that hide search terms, follows simple redirects, and records HTTP timing metrics to help prioritise high-signal responses.
+* **Windows firewall orchestration** – manage host policies directly from the CLI with `--firewall-*` helpers, record exception snapshots, remove stale allowances, and surface profile state/diagnostics in JSON so automation stacks can react.
+* **Security Center registration** – advertise Paranoid as a first-class antivirus/firewall to Windows Security Center via `--security-center-register`, ensuring the operating system knows the suite is handling both vectors.
 * **USB incident toolkit** – `--usb-create` provisions a bootable Linux image on removable media so responders can cold-boot compromised systems into a trusted scanning environment with optional Tor packages.
 * **Windows baseline repair** – capture clean manifests, audit live installations, and stage replacement files per Windows version using the `--windows-repair-*` workflow.
 
@@ -63,6 +65,7 @@ The `ui/` directory hosts a modern Ionic + Angular front-end bundled in Electron
 * **Filesystem Integrity** – manage baselines and verification runs with guidance around ransomware burst detection and quarantine workflows.
 * **Threat Intelligence** – reload indicator CSVs, run ClamAV/YARA scans, and execute process/file quarantine actions from prominent controls.
 * **Dark Web Recon** – configure onion host/path/port and persistent keyword hunts; Tor-backed lookups stream structured PII hits and raw console output.
+* **Firewall & Security Center** – stream the current Windows firewall posture, add or remove allowances, load/save policy snapshots, build USB media, and register the suite with Windows Security Center using large-format controls.
 * **System Hygiene** – trigger host audits and review severity-badged findings alongside the live log stream.
 
 ```bash
@@ -129,6 +132,17 @@ sudo ./paranoid_av --usb-create /dev/sdb /tmp/paranoid-usb
 # query a dark-web onion for leaked credentials (Tor proxy must be listening on localhost:9050)
 ./paranoid_av --tor-proxy 9050 --darkweb-scan exampleonion.onion /search "your-company.com,password"
 # the scanner extracts keyword hits, structured data like SSNs, and Base64-encoded leaks while reporting HTTP status and latency
+
+# inspect and tune the Windows firewall (run on Windows for full coverage)
+./paranoid_av --json --firewall-status
+./paranoid_av --firewall-allow-app "C:\\Program Files\\Tor\\tor.exe" "Tor" outbound
+./paranoid_av --firewall-allow-port 8443 TCP inbound "Secure proxy"
+./paranoid_av --firewall-save-policy policies/workstations.policy
+./paranoid_av --firewall-remove-rule "Secure proxy"
+./paranoid_av --firewall-load-policy policies/workstations.policy
+
+# advertise the suite to Windows Security Center (requires Administrator privileges)
+./paranoid_av --security-center-register "Paranoid Endpoint" "C:\\Program Files\\Paranoid\\paranoid_av.exe" mode=both
 
 # capture a clean manifest from a trusted Windows volume (run on Windows with Administrator privileges)
 ./paranoid_av --windows-repair-capture C:\\Windows "Windows 11" 22621 win11 manifests/win11.manifest

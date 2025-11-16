@@ -29,6 +29,10 @@ const routes: Routes = [
         loadChildren: () => import('../pages/dark-web/dark-web.module').then((m) => m.DarkWebPageModule)
       },
       {
+        path: 'firewall',
+        loadChildren: () => import('../pages/firewall/firewall.module').then((m) => m.FirewallPageModule)
+      },
+      {
         path: 'system',
         loadChildren: () => import('../pages/system/system.module').then((m) => m.SystemPageModule)
       },

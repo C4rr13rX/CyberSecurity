@@ -297,6 +297,93 @@ ipcMain.handle('command:darkweb-search', async (_event, payload = {}) => {
   return { hits, log: output.trim() };
 });
 
+ipcMain.handle('command:firewall-status', async () => {
+  const output = await runBackend(['--json', '--firewall-status']);
+  const status = parseJsonSafe(output) || {};
+  return { status, log: output.trim() };
+});
+
+ipcMain.handle('command:firewall-allow-app', async (_event, payload = {}) => {
+  if (!payload.path) {
+    throw new Error('Application path required');
+  }
+  const args = ['--firewall-allow-app', payload.path];
+  if (payload.label) {
+    args.push(payload.label);
+  }
+  if (payload.direction) {
+    args.push(payload.direction);
+  }
+  const output = await runBackend(args);
+  return { log: output.trim() };
+});
+
+ipcMain.handle('command:firewall-allow-port', async (_event, payload = {}) => {
+  if (!payload.port) {
+    throw new Error('Port required');
+  }
+  const args = ['--firewall-allow-port', String(payload.port)];
+  if (payload.protocol) {
+    args.push(payload.protocol);
+  }
+  if (payload.direction) {
+    args.push(payload.direction);
+  }
+  if (payload.label) {
+    args.push(payload.label);
+  }
+  const output = await runBackend(args);
+  return { log: output.trim() };
+});
+
+ipcMain.handle('command:firewall-policy-load', async (_event, payload = {}) => {
+  if (!payload.path) {
+    throw new Error('Policy file required');
+  }
+  const output = await runBackend(['--firewall-load-policy', payload.path]);
+  return { log: output.trim() };
+});
+
+ipcMain.handle('command:firewall-policy-save', async (_event, payload = {}) => {
+  if (!payload.path) {
+    throw new Error('Policy file required');
+  }
+  const output = await runBackend(['--firewall-save-policy', payload.path]);
+  return { log: output.trim() };
+});
+
+ipcMain.handle('command:firewall-remove-rule', async (_event, payload = {}) => {
+  if (!payload.name) {
+    throw new Error('Rule name required');
+  }
+  const output = await runBackend(['--firewall-remove-rule', payload.name]);
+  return { log: output.trim() };
+});
+
+ipcMain.handle('command:security-center-status', async () => {
+  const output = await runBackend(['--json', '--security-center-status']);
+  const products = parseJsonSafe(output) || [];
+  return { products, log: output.trim() };
+});
+
+ipcMain.handle('command:security-center-register', async (_event, payload = {}) => {
+  if (!payload.name || !payload.path) {
+    throw new Error('Product name and executable path are required');
+  }
+  const args = ['--security-center-register', payload.name, payload.path];
+  if (payload.guid) {
+    args.push(`guid=${payload.guid}`);
+  }
+  if (payload.reporting) {
+    args.push(`reporting=${payload.reporting}`);
+  }
+  if (payload.mode) {
+    args.push(`mode=${payload.mode}`);
+  }
+  const output = await runBackend(args);
+  return { log: output.trim() };
+});
+
 ipcMain.handle('command:windows-detect', async () => {
   const output = await runBackend(['--json', '--windows-repair-detect']);
   const json = parseJsonSafe(output) || {};

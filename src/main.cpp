@@ -1,20 +1,24 @@
 #include "AntivirusSuite/DarkWebScanner.hpp"
+#include "AntivirusSuite/FirewallManager.hpp"
 #include "AntivirusSuite/FileIntegrityMonitor.hpp"
 #include "AntivirusSuite/HeuristicAnalyzer.hpp"
 #include "AntivirusSuite/OpenAIAnalyzer.hpp"
 #include "AntivirusSuite/ProcessScanner.hpp"
 #include "AntivirusSuite/QuarantineManager.hpp"
 #include "AntivirusSuite/RansomwareMonitor.hpp"
+#include "AntivirusSuite/RootkitDetector.hpp"
 #include "AntivirusSuite/SignatureScanner.hpp"
 #include "AntivirusSuite/SystemInspector.hpp"
-#include "AntivirusSuite/RootkitDetector.hpp"
-#include "AntivirusSuite/USBDeployer.hpp"
 #include "AntivirusSuite/ThreatIntel.hpp"
 #include "AntivirusSuite/TorClient.hpp"
-#include "AntivirusSuite/YaraScanner.hpp"
+#include "AntivirusSuite/USBDeployer.hpp"
 #include "AntivirusSuite/WindowsRepairManager.hpp"
+#include "AntivirusSuite/WindowsSecurityCenterBridge.hpp"
+#include "AntivirusSuite/YaraScanner.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -23,6 +27,7 @@
 #include <sstream>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
@@ -90,6 +95,32 @@ std::vector<std::string> splitComma(const std::string &value) {
         }
     }
     return tokens;
+}
+
+std::string toLowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+bool isDirectionToken(const std::string &value) {
+    const std::string lower = toLowerCopy(value);
+    return lower == "in" || lower == "inbound" || lower == "out" || lower == "outbound" || lower == "both";
+}
+
+std::string canonicalDirection(const std::string &value) {
+    const std::string lower = toLowerCopy(value);
+    if (lower == "in" || lower == "inbound") {
+        return "inbound";
+    }
+    if (lower == "out" || lower == "outbound") {
+        return "outbound";
+    }
+    return "both";
+}
+
+bool isProtocolToken(const std::string &value) {
+    const std::string lower = toLowerCopy(value);
+    return lower == "tcp" || lower == "udp" || lower == "any" || lower == "all";
 }
 
 void printProcessReportTable(const std::vector<antivirus::ProcessInfo> &processes) {
@@ -178,6 +209,136 @@ void printProcessReportDetailed(const std::vector<antivirus::ProcessInfo> &proce
         std::cout << "\n";
     }
 }
+
+void printFirewallStatus(const antivirus::FirewallStatus &status, bool jsonOutput) {
+    if (jsonOutput) {
+        std::cout << "{\n  \"nativeSupport\": " << (status.nativeSupport ? "true" : "false") << ",\n";
+        std::cout << "  \"profiles\": [\n";
+        for (std::size_t i = 0; i < status.profiles.size(); ++i) {
+            const auto &profile = status.profiles[i];
+            std::cout << "    {\"profile\": \"" << jsonEscape(profile.profile) << "\", \"enabled\": "
+                      << (profile.enabled ? "true" : "false") << ", \"inbound\": \"" << jsonEscape(profile.inboundAction)
+                      << "\", \"outbound\": \"" << jsonEscape(profile.outboundAction) << "\"}";
+            if (i + 1 < status.profiles.size()) {
+                std::cout << ',';
+            }
+            std::cout << "\n";
+        }
+        std::cout << "  ],\n  \"rules\": [\n";
+        for (std::size_t i = 0; i < status.rules.size(); ++i) {
+            const auto &rule = status.rules[i];
+            std::cout << "    {\"name\": \"" << jsonEscape(rule.name) << "\", \"direction\": \""
+                      << jsonEscape(rule.direction) << "\", \"action\": \"" << jsonEscape(rule.action)
+                      << "\", \"protocol\": \"" << jsonEscape(rule.protocol) << "\", \"applications\": [";
+            for (std::size_t a = 0; a < rule.applications.size(); ++a) {
+                if (a > 0) {
+                    std::cout << ',';
+                }
+                std::cout << "\"" << jsonEscape(rule.applications[a]) << "\"";
+            }
+            std::cout << "], \"ports\": [";
+            for (std::size_t p = 0; p < rule.ports.size(); ++p) {
+                if (p > 0) {
+                    std::cout << ',';
+                }
+                std::cout << rule.ports[p];
+            }
+            std::cout << "]}";
+            if (i + 1 < status.rules.size()) {
+                std::cout << ',';
+            }
+            std::cout << "\n";
+        }
+        std::cout << "  ],\n  \"diagnostics\": [";
+        for (std::size_t i = 0; i < status.diagnostics.size(); ++i) {
+            if (i > 0) {
+                std::cout << ',';
+            }
+            std::cout << "\"" << jsonEscape(status.diagnostics[i]) << "\"";
+        }
+        std::cout << "]\n}\n";
+        return;
+    }
+
+    if (!status.nativeSupport) {
+        std::cout << "[i] Native firewall control unavailable on this platform." << std::endl;
+    }
+    if (!status.profiles.empty()) {
+        std::cout << "[Profiles]\n";
+        for (const auto &profile : status.profiles) {
+            std::cout << "  - " << (profile.profile.empty() ? "Profile" : profile.profile) << " ("
+                      << (profile.enabled ? "enabled" : "disabled") << ")"
+                      << " inbound=" << (profile.inboundAction.empty() ? "?" : profile.inboundAction)
+                      << " outbound=" << (profile.outboundAction.empty() ? "?" : profile.outboundAction) << "\n";
+        }
+    }
+    if (!status.rules.empty()) {
+        std::cout << "[Policy Rules]\n";
+        for (const auto &rule : status.rules) {
+            std::cout << "  - " << (rule.name.empty() ? "unnamed" : rule.name) << " dir=" << rule.direction
+                      << " action=" << rule.action << " proto=" << rule.protocol;
+            if (!rule.ports.empty()) {
+                std::vector<std::string> portStrings;
+                portStrings.reserve(rule.ports.size());
+                for (auto port : rule.ports) {
+                    portStrings.push_back(std::to_string(port));
+                }
+                std::cout << " ports=" << joinVector(portStrings);
+            }
+            if (!rule.applications.empty()) {
+                std::cout << " apps=" << joinVector(rule.applications);
+            }
+            std::cout << "\n";
+        }
+    }
+    if (!status.diagnostics.empty()) {
+        for (const auto &message : status.diagnostics) {
+            std::cout << "[i] " << message << "\n";
+        }
+    }
+}
+
+void printSecurityCenterProducts(const std::vector<antivirus::SecurityCenterProduct> &products, bool jsonOutput) {
+    if (jsonOutput) {
+        std::cout << "[\n";
+        for (std::size_t i = 0; i < products.size(); ++i) {
+            const auto &product = products[i];
+            std::cout << "  {\"name\": \"" << jsonEscape(product.name) << "\", \"type\": \""
+                      << jsonEscape(product.type) << "\", \"state\": \"" << jsonEscape(product.state)
+                      << "\", \"path\": \"" << jsonEscape(product.path) << "\", \"default\": "
+                      << (product.isDefault ? "true" : "false") << "}";
+            if (i + 1 < products.size()) {
+                std::cout << ',';
+            }
+            std::cout << "\n";
+        }
+        std::cout << "]\n";
+        return;
+    }
+    if (products.empty()) {
+        std::cout << "[i] No Windows Security Center products were enumerated." << std::endl;
+        return;
+    }
+    std::cout << "[Windows Security Center]\n";
+    for (const auto &product : products) {
+        std::cout << "  - " << (product.name.empty() ? "Unnamed" : product.name) << " (" << product.type
+                  << ", state=" << product.state << (product.isDefault ? ", default" : "") << ')';
+        if (!product.path.empty()) {
+            std::cout << " => " << product.path;
+        }
+        std::cout << "\n";
+    }
+}
+
+void printFirewallDiagnostics(const antivirus::FirewallManager &manager) {
+    const auto diag = manager.consumeDiagnostics();
+    for (const auto &message : diag) {
+        if (!message.empty()) {
+            std::cout << "[i] " << message << "\n";
+        }
+    }
+}
+
 
 void printProcessReportJson(const std::vector<antivirus::ProcessInfo> &processes) {
     std::cout << "[\n";
@@ -645,6 +806,14 @@ void usage(const std::string &program) {
               << "  --tor-proxy <port>        Override Tor SOCKS proxy port (default 9050)\n"
               << "  --darkweb-port <port>     Override onion service port (default 80)\n"
               << "  --darkweb-scan <host> <path> <keywords>  Query onion service via Tor for leaks\n"
+              << "  --firewall-status         Display firewall profiles and policy summary\n"
+              << "  --firewall-allow-app <path> [label] [direction]   Allow application through firewall\n"
+              << "  --firewall-allow-port <port> [protocol] [direction] [label]  Allow TCP/UDP port\n"
+             << "  --firewall-load-policy <file>   Load saved firewall policy and apply rules\n"
+             << "  --firewall-save-policy <file>   Persist current firewall policy\n"
+             << "  --firewall-remove-rule <name>   Delete a firewall rule by name\n"
+             << "  --security-center-status   Enumerate Windows Security Center registrations\n"
+              << "  --security-center-register <name> <exe> [guid=G] [reporting=exe] [mode=av|firewall|both]\n"
               << "  --windows-root <path>     Override Windows directory when auditing repair manifests\n"
               << "  --windows-repair-detect   Detect host Windows version and manifest key\n"
               << "  --windows-repair-capture <windows-root> <version> <build> <key> <output>  Capture manifest from clean volume\n"
@@ -687,6 +856,8 @@ int main(int argc, char *argv[]) {
     antivirus::QuarantineManager quarantineManager;
     antivirus::USBDeployer usbDeployer;
     antivirus::WindowsRepairManager windowsRepairManager;
+    antivirus::FirewallManager firewallManager;
+    antivirus::WindowsSecurityCenterBridge securityCenterBridge;
 
     heuristics.setThreatIntel(&threatIntel);
 
@@ -1123,6 +1294,188 @@ int main(int argc, char *argv[]) {
                 std::cerr << "Dark web scan failed: " << ex.what() << std::endl;
                 return 1;
             }
+            continue;
+        }
+
+        if (arg == "--firewall-status") {
+            const auto status = firewallManager.inspectStatus();
+            printFirewallStatus(status, jsonOutput);
+            continue;
+        }
+
+        if (arg == "--firewall-allow-app") {
+            if (i + 1 >= argc) {
+                std::cerr << "--firewall-allow-app requires an executable path" << std::endl;
+                return 1;
+            }
+            const std::string application = argv[++i];
+            std::string label;
+            std::string direction = "both";
+            while (i + 1 < argc) {
+                const std::string peek = argv[i + 1];
+                if (peek.rfind("--", 0) == 0) {
+                    break;
+                }
+                if (isDirectionToken(peek)) {
+                    direction = canonicalDirection(peek);
+                    ++i;
+                    continue;
+                }
+                if (label.empty()) {
+                    label = peek;
+                    ++i;
+                    continue;
+                }
+                break;
+            }
+            const bool allowed = firewallManager.allowApplication(application, label, direction);
+            std::cout << (allowed ? "[+]" : "[!]") << " Registered firewall application rule for " << application << "\n";
+            printFirewallDiagnostics(firewallManager);
+            continue;
+        }
+
+        if (arg == "--firewall-allow-port") {
+            if (i + 1 >= argc) {
+                std::cerr << "--firewall-allow-port requires a port" << std::endl;
+                return 1;
+            }
+            const int portValue = std::stoi(argv[++i]);
+            if (portValue <= 0 || portValue > 65535) {
+                std::cerr << "Port must be between 1 and 65535" << std::endl;
+                return 1;
+            }
+            std::string protocol = "TCP";
+            std::string direction = "both";
+            std::string label;
+            while (i + 1 < argc) {
+                const std::string peek = argv[i + 1];
+                if (peek.rfind("--", 0) == 0) {
+                    break;
+                }
+                if (isProtocolToken(peek)) {
+                    protocol = peek;
+                    ++i;
+                    continue;
+                }
+                if (isDirectionToken(peek)) {
+                    direction = canonicalDirection(peek);
+                    ++i;
+                    continue;
+                }
+                if (label.empty()) {
+                    label = peek;
+                    ++i;
+                    continue;
+                }
+                break;
+            }
+            const bool allowed = firewallManager.allowPort(static_cast<std::uint16_t>(portValue), protocol, direction, label);
+            std::cout << (allowed ? "[+]" : "[!]") << " Registered firewall port rule for " << portValue << "\n";
+            printFirewallDiagnostics(firewallManager);
+            continue;
+        }
+
+        if (arg == "--firewall-load-policy") {
+            if (i + 1 >= argc) {
+                std::cerr << "--firewall-load-policy requires a file path" << std::endl;
+                return 1;
+            }
+            const std::string policyPath = argv[++i];
+            if (!firewallManager.loadPolicy(policyPath)) {
+                printFirewallDiagnostics(firewallManager);
+                return 1;
+            }
+            for (const auto &rule : firewallManager.policyRules()) {
+                firewallManager.applyRule(rule);
+            }
+            std::cout << "[+] Loaded firewall policy from " << policyPath << "\n";
+            printFirewallDiagnostics(firewallManager);
+            continue;
+        }
+
+        if (arg == "--firewall-save-policy") {
+            if (i + 1 >= argc) {
+                std::cerr << "--firewall-save-policy requires a file path" << std::endl;
+                return 1;
+            }
+            const std::string policyPath = argv[++i];
+            if (firewallManager.savePolicy(policyPath)) {
+                std::cout << "[+] Firewall policy saved to " << policyPath << "\n";
+            } else {
+                std::cerr << "Failed to save firewall policy to " << policyPath << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--firewall-remove-rule") {
+            if (i + 1 >= argc) {
+                std::cerr << "--firewall-remove-rule requires a rule name" << std::endl;
+                return 1;
+            }
+            const std::string ruleName = argv[++i];
+            const bool removed = firewallManager.removeRule(ruleName);
+            std::cout << (removed ? "[+]" : "[!]") << " Removal attempted for firewall rule " << ruleName << "\n";
+            printFirewallDiagnostics(firewallManager);
+            continue;
+        }
+
+        if (arg == "--security-center-status") {
+            const auto products = securityCenterBridge.enumerateProducts();
+            printSecurityCenterProducts(products, jsonOutput);
+            continue;
+        }
+
+        if (arg == "--security-center-register") {
+            if (i + 2 >= argc) {
+                std::cerr << "--security-center-register requires a product name and executable path" << std::endl;
+                return 1;
+            }
+            antivirus::SecurityCenterRegistration registration;
+            registration.productName = argv[++i];
+            registration.productPath = argv[++i];
+            registration.reportingPath = registration.productPath;
+            while (i + 1 < argc) {
+                const std::string peek = argv[i + 1];
+                if (peek.rfind("--", 0) == 0) {
+                    break;
+                }
+                const auto delimiter = peek.find('=');
+                if (delimiter == std::string::npos) {
+                    break;
+                }
+                ++i;
+                const std::string key = peek.substr(0, delimiter);
+                const std::string value = peek.substr(delimiter + 1);
+                if (key == "guid") {
+                    registration.guid = value;
+                } else if (key == "reporting") {
+                    registration.reportingPath = value;
+                } else if (key == "mode") {
+                    const std::string lower = toLowerCopy(value);
+                    if (lower == "firewall") {
+                        registration.includeAntivirus = false;
+                        registration.includeFirewall = true;
+                    } else if (lower == "antivirus" || lower == "av") {
+                        registration.includeAntivirus = true;
+                        registration.includeFirewall = false;
+                    } else {
+                        registration.includeAntivirus = true;
+                        registration.includeFirewall = true;
+                    }
+                }
+            }
+            std::vector<std::string> errors;
+            const bool success = securityCenterBridge.registerSuite(registration, &errors);
+            if (!errors.empty()) {
+                for (const auto &message : errors) {
+                    std::cerr << "[!] " << message << "\n";
+                }
+            }
+            if (!success) {
+                return 1;
+            }
+            std::cout << "[+] Submitted suite registration to Windows Security Center." << std::endl;
             continue;
         }
 
