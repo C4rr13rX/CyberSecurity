@@ -1,0 +1,58 @@
+<ion-header translucent="true">
+  <ion-toolbar>
+    <ion-title>Filesystem Integrity</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content fullscreen="true">
+  <ion-grid fixed>
+    <ion-row>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Baseline Management</div>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="folder-outline" slot="start"></ion-icon>
+            <ion-input [(ngModel)]="target" label="Target Path" labelPlacement="floating"></ion-input>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="save-outline" slot="start"></ion-icon>
+            <ion-input [(ngModel)]="snapshot" label="Snapshot File" labelPlacement="floating"></ion-input>
+          </ion-item>
+          <ion-button expand="block" class="wide-button" color="primary" (click)="baseline()">
+            <ion-icon slot="start" name="cloud-upload-outline"></ion-icon>
+            Baseline Directory
+          </ion-button>
+          <ion-button expand="block" class="wide-button" color="secondary" (click)="verify()">
+            <ion-icon slot="start" name="shield-half-outline"></ion-icon>
+            Verify Against Snapshot
+          </ion-button>
+          <ion-text color="light">
+            Baselines capture SHA-256 hashes, permissions, and metadata for trust verification. Store snapshots on tamper-resistant
+            storage for best results.
+          </ion-text>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Response Toolkit</div>
+          <ion-list class="paranoid-list">
+            <ion-item class="paranoid-list-item">
+              <ion-icon name="flash-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>Ransomware Watch</h2>
+                <p>Leverage <code>--ransomware-watch</code> via the CLI to monitor hot directories for burst writes.</p>
+              </ion-label>
+            </ion-item>
+            <ion-item class="paranoid-list-item">
+              <ion-icon name="cut-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>Quarantine</h2>
+                <p>Use the quarantine actions on the Threat Intel tab to freeze suspicious artefacts.</p>
+              </ion-label>
+            </ion-item>
+          </ion-list>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

@@ -1,0 +1,6 @@
+<div class="log-stream" *ngIf="entries?.length; else empty">
+  <div *ngFor="let entry of entries" class="log-entry">{{ entry }}</div>
+</div>
+<ng-template #empty>
+  <div class="log-stream placeholder">No activity yet. Actions will stream here.</div>
+</ng-template>

@@ -1,0 +1,214 @@
+<ion-header translucent="true">
+  <ion-toolbar>
+    <ion-title>System Hygiene</ion-title>
+    <ion-buttons slot="end">
+      <ion-button class="wide-button" (click)="rootkitScan()">
+        <ion-icon slot="start" name="shield-checkmark-outline"></ion-icon>
+        Rootkit Sweep
+      </ion-button>
+      <ion-button class="wide-button" (click)="audit()">
+        <ion-icon slot="start" name="scan-outline"></ion-icon>
+        Run Audit
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content fullscreen="true">
+  <ion-grid fixed>
+    <ion-row>
+      <ion-col size="12" sizeLg="7">
+        <div class="paranoid-card">
+          <div class="section-title">Findings</div>
+          <ion-list class="paranoid-list" *ngIf="findings.length; else noFindings">
+            <ion-item class="paranoid-list-item" *ngFor="let finding of findings">
+              <ion-icon name="alert-circle-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>{{ finding.description }}</h2>
+                <p>{{ finding.remediation }}</p>
+              </ion-label>
+              <ion-badge [ngClass]="{
+                  'risk-high': finding.severity === 'high',
+                  'risk-medium': finding.severity === 'medium',
+                  'risk-low': finding.severity === 'low'
+                }">{{ finding.severity }}</ion-badge>
+            </ion-item>
+          </ion-list>
+          <ng-template #noFindings>
+            <p class="placeholder">No hygiene findings yet. Run an audit to populate this view.</p>
+          </ng-template>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="5">
+        <div class="paranoid-card">
+          <div class="section-title">Rootkit Indicators</div>
+          <ion-list class="paranoid-list" *ngIf="rootkit.length; else noRootkits">
+            <ion-item class="paranoid-list-item" *ngFor="let finding of rootkit">
+              <ion-icon name="bug-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>{{ finding.indicator }} – {{ finding.description }}</h2>
+                <p *ngIf="finding.evidence">Evidence: {{ finding.evidence }}</p>
+                <p *ngIf="finding.remediation">Remediation: {{ finding.remediation }}</p>
+              </ion-label>
+              <ion-badge [ngClass]="{
+                  'risk-high': finding.severity >= 8,
+                  'risk-medium': finding.severity >= 4 && finding.severity < 8,
+                  'risk-low': finding.severity < 4
+                }">{{ finding.severity | number: '1.1-1' }}</ion-badge>
+            </ion-item>
+          </ion-list>
+          <ng-template #noRootkits>
+            <p class="placeholder">Run a rootkit sweep to populate kernel anomaly data.</p>
+          </ng-template>
+        </div>
+      </ion-col>
+    </ion-row>
+    <ion-row>
+      <ion-col size="12" sizeLg="7">
+        <div class="paranoid-card">
+          <div class="section-title">USB Incident Toolkit</div>
+          <ion-item lines="none">
+            <ion-label position="floating">Device (e.g., /dev/sdb)</ion-label>
+            <ion-input [(ngModel)]="usbDevice" placeholder="/dev/sdX"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-label position="floating">Staging directory (optional)</ion-label>
+            <ion-input [(ngModel)]="usbWorkdir" placeholder="/tmp/paranoid-usb"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-label>Include Tor client packages</ion-label>
+            <ion-toggle color="tertiary" [(ngModel)]="usbIncludeTor"></ion-toggle>
+          </ion-item>
+          <div class="cta-row">
+            <ion-button class="wide-button" (click)="buildUsb()">
+              <ion-icon slot="start" name="hardware-chip-outline"></ion-icon>
+              Flash USB Scanner
+            </ion-button>
+          </div>
+          <p class="helper-text">
+            The USB builder provisions a minimal Debian environment with the latest paranoid_av binary,
+            autoruns rootkit and system sweeps, and optionally bundles Tor for dark web checks.
+          </p>
+        </div>
+        <div class="paranoid-card windows-card">
+          <div class="section-title">Windows Recovery</div>
+          <div class="metadata-row" *ngIf="windowsVersion as version">
+            <ion-chip color="primary" fill="outline">
+              <ion-icon name="laptop-outline"></ion-icon>
+              <ion-label>{{ version.productName || 'Unknown Windows' }}</ion-label>
+            </ion-chip>
+            <ion-chip color="tertiary" fill="outline">
+              <ion-icon name="key-outline"></ion-icon>
+              <ion-label>Manifest: {{ version.manifestKey || 'n/a' }}</ion-label>
+            </ion-chip>
+            <ion-chip color="medium" fill="outline">
+              <ion-icon name="build-outline"></ion-icon>
+              <ion-label>Build {{ version.build || 'n/a' }}</ion-label>
+            </ion-chip>
+          </div>
+          <ion-item lines="none">
+            <ion-label position="floating">Windows manifest file</ion-label>
+            <ion-input [(ngModel)]="windowsManifest" placeholder="/mnt/reference/win10.manifest"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-label position="floating">Plan output (optional)</ion-label>
+            <ion-input [(ngModel)]="windowsPlanPath" placeholder="/tmp/windows_plan.txt"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-label position="floating">Windows root override (optional)</ion-label>
+            <ion-input [(ngModel)]="windowsRoot" placeholder="C:\\Windows"></ion-input>
+          </ion-item>
+          <div class="cta-row">
+            <ion-button class="wide-button" color="tertiary" (click)="detectWindows()">
+              <ion-icon slot="start" name="compass-outline"></ion-icon>
+              Detect Version
+            </ion-button>
+            <ion-button class="wide-button" (click)="auditWindows()">
+              <ion-icon slot="start" name="analytics-outline"></ion-icon>
+              Audit Manifest
+            </ion-button>
+          </div>
+          <ion-item lines="none">
+            <ion-label position="floating">Clean repository root</ion-label>
+            <ion-input [(ngModel)]="windowsRepository" placeholder="/mnt/clean-files"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-label position="floating">Staging output directory</ion-label>
+            <ion-input [(ngModel)]="windowsOutput" placeholder="/tmp/windows-rebuild"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-label position="floating">Manifest override (optional)</ion-label>
+            <ion-input [(ngModel)]="windowsManifestOverride" placeholder="/custom/win11.manifest"></ion-input>
+          </ion-item>
+          <div class="cta-row">
+            <ion-button class="wide-button" color="success" (click)="collectWindows()">
+              <ion-icon slot="start" name="download-outline"></ion-icon>
+              Stage Repairs
+            </ion-button>
+          </div>
+          <div class="plan-summary" *ngIf="windowsPlan as plan; else noWindowsPlan">
+            <div class="summary-line">
+              <strong>{{ plan.version || 'Windows' }}</strong>
+              <span>manifest {{ plan.manifestKey }} @ {{ plan.windowsRoot }}</span>
+            </div>
+            <ion-list class="paranoid-list" *ngIf="plan.issues.length; else cleanWindows">
+              <ion-item class="paranoid-list-item" *ngFor="let issue of plan.issues">
+                <ion-icon [name]="issue.type === 'missing' ? 'alert-outline' : 'construct-outline'" slot="start"></ion-icon>
+                <ion-label>
+                  <h2>{{ issue.path }}</h2>
+                  <p>
+                    {{ issue.type | uppercase }} • expected {{ issue.expectedHash || 'unknown hash' }} • size {{ issue.expectedSize }}
+                  </p>
+                  <p *ngIf="issue.observedHash">Observed {{ issue.observedHash }} ({{ issue.observedSize }})</p>
+                </ion-label>
+                <ion-badge [ngClass]="{ 'risk-high': issue.critical, 'risk-low': !issue.critical }">
+                  {{ issue.type }}
+                </ion-badge>
+              </ion-item>
+            </ion-list>
+            <ng-template #cleanWindows>
+              <p class="placeholder">No baseline drift detected against the selected manifest.</p>
+            </ng-template>
+            <div class="error-block" *ngIf="plan.errors.length">
+              <div class="error-title">Plan warnings</div>
+              <ul>
+                <li *ngFor="let error of plan.errors">{{ error }}</li>
+              </ul>
+            </div>
+            <div class="plan-path" *ngIf="plan.planPath">
+              Plan saved: {{ plan.planPath.path }} ({{ plan.planPath.saved ? 'written' : 'failed' }})
+            </div>
+          </div>
+          <ng-template #noWindowsPlan>
+            <p class="placeholder">Run an audit or collection to populate Windows recovery findings.</p>
+          </ng-template>
+          <div class="stage-summary" *ngIf="windowsStage as stage">
+            <div class="summary-line">
+              <strong>Staging</strong>
+              <ion-badge [color]="stage.success ? 'success' : 'danger'">{{ stage.success ? 'Success' : 'Issues' }}</ion-badge>
+            </div>
+            <p>{{ stage.copied.length }} files prepared for remediation.</p>
+            <div *ngIf="stage.missingSources.length" class="error-block">
+              <div class="error-title">Missing clean sources</div>
+              <ul>
+                <li *ngFor="let missing of stage.missingSources">{{ missing }}</li>
+              </ul>
+            </div>
+            <div *ngIf="stage.errors.length" class="error-block">
+              <div class="error-title">Copy errors</div>
+              <ul>
+                <li *ngFor="let error of stage.errors">{{ error }}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="5">
+        <div class="paranoid-card">
+          <div class="section-title">Audit Activity</div>
+          <app-log-stream [entries]="logs"></app-log-stream>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>
