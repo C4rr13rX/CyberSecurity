@@ -1,0 +1,185 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Firewall &amp; Security Center</ion-title>
+    <ion-buttons slot="end">
+      <ion-button fill="clear" color="secondary" (click)="refreshAll()">
+        <ion-icon name="refresh-outline" slot="start"></ion-icon>
+        Refresh
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-grid fixed>
+    <ion-row>
+      <ion-col size="12" sizeLg="7">
+        <div class="paranoid-card">
+          <div class="section-title">Firewall posture</div>
+          <ng-container *ngIf="(firewallStatus$ | async) as status; else firewallEmpty">
+            <div class="status-row">
+              <div class="status-pill" [class.warn]="!status.nativeSupport">
+                <ion-icon name="shield-checkmark-outline"></ion-icon>
+                <span>{{ status.nativeSupport ? 'Windows firewall connected' : 'Firewall controls unavailable on host' }}</span>
+              </div>
+              <ion-button size="small" color="primary" (click)="refreshFirewall()">Refresh</ion-button>
+            </div>
+            <div class="status-grid" *ngIf="status.profiles?.length">
+              <div class="profile-card" *ngFor="let profile of status.profiles">
+                <h3>{{ profile.profile || 'Profile' }}</h3>
+                <p class="state" [class.off]="!profile.enabled">{{ profile.enabled ? 'Enabled' : 'Disabled' }}</p>
+                <div class="actions">
+                  <span>Inbound: <strong>{{ profile.inboundAction || 'Unknown' }}</strong></span>
+                  <span>Outbound: <strong>{{ profile.outboundAction || 'Unknown' }}</strong></span>
+                </div>
+              </div>
+            </div>
+            <ion-list class="paranoid-list" *ngIf="status.rules?.length">
+              <ion-item class="paranoid-list-item" lines="none" *ngFor="let rule of status.rules">
+                <ion-label>
+                  <h2>{{ rule.name || 'Custom rule' }}</h2>
+                  <p>{{ rule.action | uppercase }} · {{ rule.direction | uppercase }} · {{ rule.protocol }}</p>
+                  <p *ngIf="rule.applications?.length">Apps: {{ rule.applications.join(', ') }}</p>
+                  <p *ngIf="rule.ports?.length">Ports: {{ rule.ports.join(', ') }}</p>
+                </ion-label>
+                <ion-button
+                  fill="clear"
+                  color="danger"
+                  slot="end"
+                  [disabled]="!rule.name"
+                  aria-label="Remove rule"
+                  (click)="removeRule(rule.name)"
+                >
+                  <ion-icon name="trash-outline"></ion-icon>
+                </ion-button>
+              </ion-item>
+            </ion-list>
+            <div class="diagnostics" *ngIf="status.diagnostics?.length">
+              <p *ngFor="let note of status.diagnostics">{{ note }}</p>
+            </div>
+          </ng-container>
+          <ng-template #firewallEmpty>
+            <p class="muted">No firewall telemetry yet. Trigger a refresh to query the host.</p>
+          </ng-template>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="5">
+        <div class="paranoid-card">
+          <div class="section-title">Application exceptions</div>
+          <ion-item lines="none">
+            <ion-input label="Executable" labelPlacement="floating" [(ngModel)]="appRule.path" placeholder="C:\\Program Files\\App\\app.exe"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-input label="Label" labelPlacement="floating" [(ngModel)]="appRule.label" placeholder="Friendly name"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-select label="Direction" labelPlacement="floating" interface="popover" [(ngModel)]="appRule.direction">
+              <ion-select-option value="both">Inbound &amp; Outbound</ion-select-option>
+              <ion-select-option value="inbound">Inbound only</ion-select-option>
+              <ion-select-option value="outbound">Outbound only</ion-select-option>
+            </ion-select>
+          </ion-item>
+          <ion-button expand="block" color="primary" class="wide-button" (click)="addApplicationRule()">
+            <ion-icon name="add-circle-outline" slot="start"></ion-icon>
+            Allow application
+          </ion-button>
+        </div>
+        <div class="paranoid-card">
+          <div class="section-title">Port allowances</div>
+          <ion-item lines="none">
+            <ion-input label="Port" type="number" labelPlacement="floating" [(ngModel)]="portRule.port" placeholder="9050"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-select label="Protocol" labelPlacement="floating" interface="popover" [(ngModel)]="portRule.protocol">
+              <ion-select-option value="TCP">TCP</ion-select-option>
+              <ion-select-option value="UDP">UDP</ion-select-option>
+              <ion-select-option value="ANY">ANY</ion-select-option>
+            </ion-select>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-select label="Direction" labelPlacement="floating" interface="popover" [(ngModel)]="portRule.direction">
+              <ion-select-option value="both">Inbound &amp; Outbound</ion-select-option>
+              <ion-select-option value="inbound">Inbound only</ion-select-option>
+              <ion-select-option value="outbound">Outbound only</ion-select-option>
+            </ion-select>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-input label="Label" labelPlacement="floating" [(ngModel)]="portRule.label" placeholder="Tor control"></ion-input>
+          </ion-item>
+          <ion-button expand="block" color="secondary" class="wide-button" (click)="addPortRule()">
+            <ion-icon name="git-network-outline" slot="start"></ion-icon>
+            Allow port
+          </ion-button>
+        </div>
+      </ion-col>
+    </ion-row>
+    <ion-row>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Policy management</div>
+          <ion-item lines="none">
+            <ion-input label="Policy path" labelPlacement="floating" [(ngModel)]="policyPath" placeholder="C:\\Paranoid\\firewall.policy"></ion-input>
+          </ion-item>
+          <div class="button-row">
+            <ion-button color="tertiary" expand="block" class="wide-button" (click)="loadPolicy()">
+              <ion-icon name="cloud-download-outline" slot="start"></ion-icon>
+              Load &amp; apply
+            </ion-button>
+            <ion-button color="success" expand="block" class="wide-button" (click)="savePolicy()">
+              <ion-icon name="save-outline" slot="start"></ion-icon>
+              Save snapshot
+            </ion-button>
+          </div>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Windows Security Center</div>
+          <div class="status-row">
+            <h3>Registered suites</h3>
+            <ion-button size="small" color="primary" (click)="refreshSecurityCenter()">
+              <ion-icon name="refresh-outline" slot="start"></ion-icon>
+              Refresh
+            </ion-button>
+          </div>
+          <ion-list class="paranoid-list" *ngIf="(securityProducts$ | async) as products; else noProducts">
+            <ion-item class="paranoid-list-item" lines="none" *ngFor="let product of products">
+              <ion-label>
+                <h2>{{ product.name || 'Product' }} · {{ product.type }}</h2>
+                <p>{{ product.state | titlecase }} {{ product.isDefault ? '· Default' : '' }}</p>
+                <p *ngIf="product.path">{{ product.path }}</p>
+              </ion-label>
+            </ion-item>
+          </ion-list>
+          <ng-template #noProducts>
+            <p class="muted">No third-party registrations were returned from the host.</p>
+          </ng-template>
+          <div class="section-title compact">Register suite</div>
+          <ion-item lines="none">
+            <ion-input label="Display name" labelPlacement="floating" [(ngModel)]="registerForm.name"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-input label="Executable" labelPlacement="floating" [(ngModel)]="registerForm.path"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-input label="Reporting binary" labelPlacement="floating" [(ngModel)]="registerForm.reporting" placeholder="Optional override"></ion-input>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-select label="Mode" labelPlacement="floating" interface="popover" [(ngModel)]="registerForm.mode">
+              <ion-select-option value="both">Antivirus &amp; Firewall</ion-select-option>
+              <ion-select-option value="antivirus">Antivirus only</ion-select-option>
+              <ion-select-option value="firewall">Firewall only</ion-select-option>
+            </ion-select>
+          </ion-item>
+          <ion-item lines="none">
+            <ion-input label="Custom GUID" labelPlacement="floating" [(ngModel)]="registerForm.guid" placeholder="Optional"></ion-input>
+          </ion-item>
+          <ion-button expand="block" color="warning" class="wide-button" (click)="registerSecuritySuite()">
+            <ion-icon name="shield-half-outline" slot="start"></ion-icon>
+            Register with Windows Security Center
+          </ion-button>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

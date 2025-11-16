@@ -1,0 +1,73 @@
+<ion-header translucent="true">
+  <ion-toolbar>
+    <ion-title>Paranoid Defense Console</ion-title>
+    <ion-buttons slot="end">
+      <ion-button class="wide-button" (click)="refreshAll()">
+        <ion-icon slot="start" name="refresh-outline"></ion-icon>
+        Refresh All
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content fullscreen="true">
+  <ion-grid fixed>
+    <ion-row>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Top Process Risks</div>
+          <ion-list class="paranoid-list" *ngIf="topProcesses().length; else noProcesses">
+            <ion-item class="paranoid-list-item" *ngFor="let proc of topProcesses()">
+              <ion-icon name="pulse-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>{{ proc.name || 'Unknown' }} <small>#{{ proc.pid }}</small></h2>
+                <p>{{ proc.user }}</p>
+                <p *ngIf="proc.heuristics.length">{{ proc.heuristics[0].description }}</p>
+              </ion-label>
+              <ion-badge [ngClass]="{
+                  'risk-high': proc.riskScore >= 70,
+                  'risk-medium': proc.riskScore >= 40 && proc.riskScore < 70,
+                  'risk-low': proc.riskScore < 40
+                }">
+                {{ proc.riskScore | number:'1.0-0' }}
+              </ion-badge>
+            </ion-item>
+          </ion-list>
+          <ng-template #noProcesses>
+            <p class="placeholder">Trigger a process snapshot to populate telemetry.</p>
+          </ng-template>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Latest System Findings</div>
+          <ion-list class="paranoid-list" *ngIf="topFindings().length; else noFindings">
+            <ion-item class="paranoid-list-item" *ngFor="let finding of topFindings()">
+              <ion-icon name="warning-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>{{ finding.description }}</h2>
+                <p>{{ finding.remediation }}</p>
+              </ion-label>
+              <ion-badge [ngClass]="{
+                  'risk-high': finding.severity === 'high',
+                  'risk-medium': finding.severity === 'medium',
+                  'risk-low': finding.severity === 'low'
+                }">{{ finding.severity }}</ion-badge>
+            </ion-item>
+          </ion-list>
+          <ng-template #noFindings>
+            <p class="placeholder">Launch a system audit to populate host hygiene findings.</p>
+          </ng-template>
+        </div>
+      </ion-col>
+    </ion-row>
+    <ion-row>
+      <ion-col size="12">
+        <div class="paranoid-card">
+          <div class="section-title">Live Activity</div>
+          <app-log-stream [entries]="logs"></app-log-stream>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

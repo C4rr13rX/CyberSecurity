@@ -1,0 +1,93 @@
+<ion-header translucent="true">
+  <ion-toolbar>
+    <ion-title>Dark Web Recon</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content fullscreen="true">
+  <ion-grid fixed>
+    <ion-row>
+      <ion-col size="12" sizeLg="5">
+        <div class="paranoid-card">
+          <div class="section-title">Search Configuration</div>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="globe-outline" slot="start"></ion-icon>
+            <ion-input
+              [(ngModel)]="host"
+              label="Onion Host"
+              labelPlacement="floating"
+              placeholder="exampleonion.onion"
+            ></ion-input>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="navigate-outline" slot="start"></ion-icon>
+            <ion-input [(ngModel)]="path" label="Path" labelPlacement="floating" placeholder="/search"></ion-input>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="cube-outline" slot="start"></ion-icon>
+            <ion-input type="number" [(ngModel)]="port" label="Service Port" labelPlacement="floating"></ion-input>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="git-branch-outline" slot="start"></ion-icon>
+            <ion-input type="number" [(ngModel)]="proxy" label="Tor SOCKS Port" labelPlacement="floating"></ion-input>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="key-outline" slot="start"></ion-icon>
+            <ion-textarea
+              auto-grow="true"
+              [(ngModel)]="keywords"
+              label="Keywords"
+              labelPlacement="floating"
+              placeholder="Comma separated keywords, emails, SSNs, license plates"
+            ></ion-textarea>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="timer-outline" slot="start"></ion-icon>
+            <ion-range min="5" max="180" step="5" [(ngModel)]="cadence">
+              <ion-label slot="start">{{ cadence }} min cadence</ion-label>
+            </ion-range>
+          </ion-item>
+          <ion-button expand="block" class="wide-button" color="secondary" (click)="searchNow()">
+            <ion-icon slot="start" name="search-outline"></ion-icon>
+            Search Once
+          </ion-button>
+          <ion-button expand="block" class="wide-button" color="primary" (click)="startStream()" [disabled]="streaming">
+            <ion-icon slot="start" name="radio-outline"></ion-icon>
+            Start Continuous Recon
+          </ion-button>
+          <ion-button expand="block" class="wide-button" color="medium" (click)="stopStream()" [disabled]="!streaming">
+            <ion-icon slot="start" name="pause-outline"></ion-icon>
+            Stop Stream
+          </ion-button>
+          <ion-text color="light">
+            Ensure the Tor daemon is running locally (default SOCKS 9050). The backend client follows redirects, parses Base64 dumps,
+            and scores hits by PII confidence.
+          </ion-text>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="7">
+        <div class="paranoid-card">
+          <div class="section-title">Latest Hits</div>
+          <ion-list class="paranoid-list" *ngIf="hits.length; else noHits">
+            <ion-item class="paranoid-list-item" *ngFor="let hit of hits">
+              <ion-icon name="planet-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>{{ hit.keyword }} <small>[{{ hit.matchType }}]</small></h2>
+                <p>Confidence {{ hit.confidence | number:'1.0-0' }}%</p>
+                <p *ngIf="hit.source">Source: {{ hit.source }}</p>
+                <p class="context">{{ hit.context }}</p>
+              </ion-label>
+            </ion-item>
+          </ion-list>
+          <ng-template #noHits>
+            <p class="placeholder">No dark web results yet. Launch a search to populate this feed.</p>
+          </ng-template>
+        </div>
+        <div class="paranoid-card">
+          <div class="section-title">Tor Activity</div>
+          <app-log-stream [entries]="logs"></app-log-stream>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

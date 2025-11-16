@@ -1,0 +1,68 @@
+<ion-header translucent="true">
+  <ion-toolbar>
+    <ion-title>Process Monitoring</ion-title>
+    <ion-buttons slot="end">
+      <ion-button class="wide-button" (click)="snapshot()">
+        <ion-icon slot="start" name="search-outline"></ion-icon>
+        Snapshot
+      </ion-button>
+      <ion-button class="wide-button" color="success" (click)="startLoop()" [disabled]="streaming">
+        <ion-icon slot="start" name="play-outline"></ion-icon>
+        Start Loop
+      </ion-button>
+      <ion-button class="wide-button" color="medium" (click)="stopLoop()" [disabled]="!streaming">
+        <ion-icon slot="start" name="stop-outline"></ion-icon>
+        Stop Loop
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content fullscreen="true">
+  <ion-grid fixed>
+    <ion-row>
+      <ion-col size="12">
+        <div class="paranoid-card controls">
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="filter-outline" slot="start"></ion-icon>
+            <ion-input
+              [(ngModel)]="search"
+              (ionInput)="applyFilter()"
+              placeholder="Search by PID, name, or user"
+            ></ion-input>
+            <ion-note slot="end">{{ filtered.length }} processes</ion-note>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="time-outline" slot="start"></ion-icon>
+            <ion-range min="2" max="60" step="2" [(ngModel)]="interval">
+              <ion-label slot="start">{{ interval }}s interval</ion-label>
+            </ion-range>
+          </ion-item>
+        </div>
+      </ion-col>
+    </ion-row>
+    <ion-row>
+      <ion-col size="12" sizeLg="8">
+        <div class="paranoid-card">
+          <ion-list class="paranoid-list">
+            <ion-item class="paranoid-list-item" *ngFor="let proc of filtered">
+              <ion-icon name="cube-outline" slot="start"></ion-icon>
+              <ion-label>
+                <h2>{{ proc.name || 'Unknown' }} <small>#{{ proc.pid }}</small></h2>
+                <p>{{ proc.user }} &bull; Risk {{ proc.riskScore | number:'1.0-0' }}</p>
+                <p *ngFor="let finding of proc.heuristics | slice:0:2">{{ finding.description }}</p>
+              </ion-label>
+              <ion-badge [ngClass]="riskBadge(proc.riskScore)">{{ proc.riskScore | number:'1.0-0' }}</ion-badge>
+            </ion-item>
+          </ion-list>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="4">
+        <div class="paranoid-card">
+          <div class="section-title">Streaming Console</div>
+          <app-log-stream [entries]="logs"></app-log-stream>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

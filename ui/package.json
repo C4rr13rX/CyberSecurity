@@ -1,0 +1,51 @@
+{
+  "name": "paranoid-av-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ionic Angular desktop shell for the Paranoid antivirus suite",
+  "main": "electron/main.js",
+  "scripts": {
+    "ng:serve": "ng serve",
+    "ng:build": "ng build",
+    "ng:lint": "ng lint",
+    "ng:test": "ng test",
+    "electron:start": "wait-on http://localhost:4200 && electron ./electron/main.js",
+    "electron:build": "npm run ng:build && electron ./electron/main.js",
+    "start": "npm-run-all -p ng:serve electron:start",
+    "build": "npm run electron:build"
+  },
+  "dependencies": {
+    "@angular/animations": "16.2.12",
+    "@angular/common": "16.2.12",
+    "@angular/compiler": "16.2.12",
+    "@angular/core": "16.2.12",
+    "@angular/forms": "16.2.12",
+    "@angular/platform-browser": "16.2.12",
+    "@angular/platform-browser-dynamic": "16.2.12",
+    "@angular/router": "16.2.12",
+    "@ionic/angular": "7.7.4",
+    "ionicons": "7.1.2",
+    "rxjs": "7.8.1",
+    "tslib": "2.6.2",
+    "zone.js": "0.13.3"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "16.2.12",
+    "@angular/cli": "16.2.12",
+    "@angular/compiler-cli": "16.2.12",
+    "@types/jasmine": "4.3.6",
+    "@types/node": "20.11.17",
+    "electron": "26.2.1",
+    "jasmine-core": "5.1.1",
+    "karma": "6.4.2",
+    "karma-chrome-launcher": "3.2.0",
+    "karma-coverage": "2.2.0",
+    "karma-jasmine": "5.1.0",
+    "karma-jasmine-html-reporter": "2.1.0",
+    "npm-run-all": "4.1.5",
+    "sass": "1.69.5",
+    "ts-node": "10.9.2",
+    "typescript": "5.1.6",
+    "wait-on": "7.0.1"
+  }
+}
