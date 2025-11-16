@@ -1,0 +1,77 @@
+<ion-header translucent="true">
+  <ion-toolbar>
+    <ion-title>Threat Intelligence &amp; Response</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content fullscreen="true">
+  <ion-grid fixed>
+    <ion-row>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Indicator Management</div>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="cloud-download-outline" slot="start"></ion-icon>
+            <ion-input [(ngModel)]="indicatorPath" label="Indicator CSV" labelPlacement="floating"></ion-input>
+          </ion-item>
+          <ion-button expand="block" class="wide-button" color="primary" (click)="reloadIntel()">
+            <ion-icon slot="start" name="reload-outline"></ion-icon>
+            Reload Indicators
+          </ion-button>
+          <ion-text color="light">
+            The CLI expects <code>type,value</code> entries (domain, hash, ip). Reloading merges new indicators into active memory.
+          </ion-text>
+        </div>
+      </ion-col>
+      <ion-col size="12" sizeLg="6">
+        <div class="paranoid-card">
+          <div class="section-title">Signature &amp; YARA Scanning</div>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="document-text-outline" slot="start"></ion-icon>
+            <ion-input [(ngModel)]="scanTarget" label="Target Path" labelPlacement="floating"></ion-input>
+          </ion-item>
+          <ion-item class="paranoid-list-item" [disabled]="!yara">
+            <ion-icon name="flask-outline" slot="start"></ion-icon>
+            <ion-input [(ngModel)]="yaraRules" label="YARA Rules" labelPlacement="floating"></ion-input>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="flask-outline" slot="start"></ion-icon>
+            <ion-toggle [(ngModel)]="yara">Include YARA</ion-toggle>
+          </ion-item>
+          <ion-button expand="block" class="wide-button" color="secondary" (click)="scan()">
+            <ion-icon slot="start" name="bug-outline"></ion-icon>
+            Run Scan
+          </ion-button>
+          <ion-text color="light">
+            Signature scanning leverages ClamAV when installed. Enable YARA for rule-based hunting (requires local YARA CLI).
+          </ion-text>
+        </div>
+      </ion-col>
+    </ion-row>
+    <ion-row>
+      <ion-col size="12">
+        <div class="paranoid-card">
+          <div class="section-title">Quarantine Actions</div>
+          <ion-item class="paranoid-list-item">
+            <ion-segment [(ngModel)]="quarantineMode" value="file">
+              <ion-segment-button value="file">
+                <ion-label>File</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="kill">
+                <ion-label>Process</ion-label>
+              </ion-segment-button>
+            </ion-segment>
+          </ion-item>
+          <ion-item class="paranoid-list-item">
+            <ion-icon name="clipboard-outline" slot="start"></ion-icon>
+            <ion-input [(ngModel)]="quarantineValue" [placeholder]="quarantineMode === 'file' ? 'Path to isolate' : 'PID to terminate'"></ion-input>
+          </ion-item>
+          <ion-button expand="block" class="wide-button" color="danger" (click)="quarantine()">
+            <ion-icon slot="start" name="hand-left-outline"></ion-icon>
+            Execute Quarantine
+          </ion-button>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

@@ -1,0 +1,12 @@
+.log-stream {
+  width: 100%;
+}
+
+.log-entry + .log-entry {
+  margin-top: 0.35rem;
+}
+
+.placeholder {
+  opacity: 0.6;
+  font-style: italic;
+}

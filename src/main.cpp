@@ -7,9 +7,12 @@
 #include "AntivirusSuite/RansomwareMonitor.hpp"
 #include "AntivirusSuite/SignatureScanner.hpp"
 #include "AntivirusSuite/SystemInspector.hpp"
+#include "AntivirusSuite/RootkitDetector.hpp"
+#include "AntivirusSuite/USBDeployer.hpp"
 #include "AntivirusSuite/ThreatIntel.hpp"
 #include "AntivirusSuite/TorClient.hpp"
 #include "AntivirusSuite/YaraScanner.hpp"
+#include "AntivirusSuite/WindowsRepairManager.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -403,6 +406,222 @@ void printDarkWebResult(const antivirus::DarkWebScanResult &result) {
     }
 }
 
+void printRootkitReportJson(const std::vector<antivirus::RootkitFinding> &findings) {
+    std::cout << "[\n";
+    for (std::size_t i = 0; i < findings.size(); ++i) {
+        const auto &finding = findings[i];
+        std::cout << "  {\"indicator\": \"" << jsonEscape(finding.indicator) << "\", \"description\": \""
+                  << jsonEscape(finding.description) << "\", \"severity\": " << std::fixed << std::setprecision(2)
+                  << finding.severity << std::defaultfloat << ", \"evidence\": \"" << jsonEscape(finding.evidence)
+                  << "\"";
+        if (!finding.reference.empty()) {
+            std::cout << ", \"reference\": \"" << jsonEscape(finding.reference) << "\"";
+        }
+        if (!finding.remediation.empty()) {
+            std::cout << ", \"remediation\": \"" << jsonEscape(finding.remediation) << "\"";
+        }
+        std::cout << "}";
+        if (i + 1 != findings.size()) {
+            std::cout << ',';
+        }
+        std::cout << "\n";
+    }
+    std::cout << "]\n";
+}
+
+void printRootkitReportText(const std::vector<antivirus::RootkitFinding> &findings) {
+    if (findings.empty()) {
+        std::cout << "[+] Rootkit sweep completed. No anomalies.\n";
+        return;
+    }
+
+    for (const auto &finding : findings) {
+        const char indicator = finding.severity >= 8.0 ? '!' : 'i';
+        std::cout << '[' << indicator << " ] Rootkit " << finding.indicator << " (severity=" << std::fixed
+                  << std::setprecision(1) << finding.severity << std::defaultfloat << ") " << finding.description;
+        if (!finding.reference.empty()) {
+            std::cout << " ref=" << finding.reference;
+        }
+        if (!finding.evidence.empty()) {
+            std::cout << " -> " << finding.evidence;
+        }
+        if (!finding.remediation.empty()) {
+            std::cout << " | remediate: " << finding.remediation;
+        }
+        std::cout << "\n";
+    }
+}
+
+void printRootkitReport(const std::vector<antivirus::RootkitFinding> &findings, bool jsonOutput) {
+    if (jsonOutput) {
+        printRootkitReportJson(findings);
+    } else {
+        printRootkitReportText(findings);
+    }
+}
+
+std::string windowsIssueType(const antivirus::WindowsRepairIssue &issue) {
+    return issue.issue == antivirus::WindowsRepairIssueType::Missing ? "missing" : "mismatch";
+}
+
+void writeWindowsPlanJson(std::ostream &out, const antivirus::WindowsRepairPlan &plan, const std::string &indent) {
+    out << "{\n";
+    out << indent << "  \"version\": \"" << jsonEscape(plan.manifest.versionLabel) << "\",\n";
+    out << indent << "  \"build\": \"" << jsonEscape(plan.manifest.buildNumber) << "\",\n";
+    out << indent << "  \"manifestKey\": \"" << jsonEscape(plan.manifest.manifestKey) << "\",\n";
+    out << indent << "  \"windowsRoot\": \"" << jsonEscape(plan.windowsRoot.generic_string()) << "\",\n";
+    out << indent << "  \"issues\": [\n";
+    for (std::size_t i = 0; i < plan.issues.size(); ++i) {
+        const auto &issue = plan.issues[i];
+        out << indent << "    {\"type\": \"" << windowsIssueType(issue) << "\", \"path\": \""
+            << jsonEscape(issue.entry.relativePath) << "\", \"critical\": "
+            << (issue.entry.critical ? "true" : "false") << ", \"expectedHash\": \""
+            << jsonEscape(issue.entry.sha256) << "\", \"expectedSize\": " << issue.entry.size
+            << ", \"observedHash\": ";
+        if (issue.observedHash.empty()) {
+            out << "null";
+        } else {
+            out << "\"" << jsonEscape(issue.observedHash) << "\"";
+        }
+        out << ", \"observedSize\": " << issue.observedSize << "}";
+        if (i + 1 != plan.issues.size()) {
+            out << ',';
+        }
+        out << "\n";
+    }
+    out << indent << "  ],\n";
+    out << indent << "  \"errors\": [";
+    for (std::size_t i = 0; i < plan.errors.size(); ++i) {
+        if (i > 0) {
+            out << ',';
+        }
+        out << "\"" << jsonEscape(plan.errors[i]) << "\"";
+    }
+    out << "]\n";
+    out << indent << "}";
+}
+
+void writeWindowsStageJson(std::ostream &out, const antivirus::WindowsRepairStageResult &stage, const std::string &indent) {
+    out << "{\n";
+    out << indent << "  \"success\": "
+        << ((stage.errors.empty() && stage.missingSources.empty()) ? "true" : "false") << ",\n";
+    out << indent << "  \"copied\": [";
+    for (std::size_t i = 0; i < stage.copied.size(); ++i) {
+        if (i > 0) {
+            out << ',';
+        }
+        out << "\"" << jsonEscape(stage.copied[i]) << "\"";
+    }
+    out << "],\n";
+    out << indent << "  \"missingSources\": [";
+    for (std::size_t i = 0; i < stage.missingSources.size(); ++i) {
+        if (i > 0) {
+            out << ',';
+        }
+        out << "\"" << jsonEscape(stage.missingSources[i]) << "\"";
+    }
+    out << "],\n";
+    out << indent << "  \"errors\": [";
+    for (std::size_t i = 0; i < stage.errors.size(); ++i) {
+        if (i > 0) {
+            out << ',';
+        }
+        out << "\"" << jsonEscape(stage.errors[i]) << "\"";
+    }
+    out << "]\n";
+    out << indent << "}";
+}
+
+void printWindowsRepairPlan(const antivirus::WindowsRepairPlan &plan, bool jsonOutput) {
+    if (jsonOutput) {
+        writeWindowsPlanJson(std::cout, plan, "");
+        std::cout << '\n';
+        return;
+    }
+
+    std::cout << "[*] Windows repair audit for "
+              << (plan.manifest.versionLabel.empty() ? "[unknown]" : plan.manifest.versionLabel)
+              << " build " << (plan.manifest.buildNumber.empty() ? "[unknown]" : plan.manifest.buildNumber)
+              << " (key=" << plan.manifest.manifestKey << ") root=" << plan.windowsRoot.generic_string() << "\n";
+
+    if (plan.issues.empty()) {
+        std::cout << "[+] No missing or corrupted baseline files detected." << std::endl;
+    } else {
+        for (const auto &issue : plan.issues) {
+            const std::string type = windowsIssueType(issue);
+            std::cout << "[!] " << type << ": " << issue.entry.relativePath
+                      << " (critical=" << (issue.entry.critical ? "yes" : "no")
+                      << ", expectedHash=" << (issue.entry.sha256.empty() ? "[unknown]" : issue.entry.sha256)
+                      << ", expectedSize=" << issue.entry.size;
+            if (issue.issue == antivirus::WindowsRepairIssueType::HashMismatch) {
+                std::cout << ", observedHash=" << (issue.observedHash.empty() ? "[unknown]" : issue.observedHash)
+                          << ", observedSize=" << issue.observedSize;
+            } else {
+                std::cout << ", observedHash=[missing], observedSize=" << issue.observedSize;
+            }
+            std::cout << "\n";
+        }
+    }
+
+    for (const auto &error : plan.errors) {
+        std::cout << "[!] Plan error: " << error << "\n";
+    }
+}
+
+void printWindowsCollection(const antivirus::WindowsRepairPlan &plan, const antivirus::WindowsRepairStageResult &stage,
+                            bool jsonOutput, const std::optional<fs::path> &planPath = std::nullopt,
+                            bool planSaved = false) {
+    if (jsonOutput) {
+        std::cout << "{\n  \"plan\": ";
+        writeWindowsPlanJson(std::cout, plan, "  ");
+        std::cout << ",\n  \"stage\": ";
+        writeWindowsStageJson(std::cout, stage, "  ");
+        if (planPath) {
+            std::cout << ",\n  \"planPath\": {\"path\": \"" << jsonEscape(planPath->generic_string())
+                      << "\", \"saved\": " << (planSaved ? "true" : "false") << "}";
+        }
+        std::cout << "\n}\n";
+        return;
+    }
+
+    printWindowsRepairPlan(plan, false);
+    if (planPath) {
+        std::cout << (planSaved ? "[+]" : "[!]") << " Plan output " << planPath->string();
+        if (!planSaved) {
+            std::cout << " (failed to write)";
+        }
+        std::cout << "\n";
+    }
+    std::cout << "[*] Staging results: copied " << stage.copied.size() << " file(s)." << std::endl;
+    if (!stage.missingSources.empty()) {
+        for (const auto &missing : stage.missingSources) {
+            std::cout << "[!] Missing clean source: " << missing << "\n";
+        }
+    }
+    if (!stage.errors.empty()) {
+        for (const auto &error : stage.errors) {
+            std::cout << "[!] Staging error: " << error << "\n";
+        }
+    }
+}
+
+fs::path resolveSelfPath(const char *argv0) {
+    std::error_code ec;
+    fs::path path = fs::read_symlink("/proc/self/exe", ec);
+    if (!ec && !path.empty()) {
+        return path;
+    }
+    if (argv0 != nullptr) {
+        fs::path fallback(argv0);
+        path = fs::absolute(fallback, ec);
+        if (!ec) {
+            return path;
+        }
+        return fallback;
+    }
+    return fs::current_path() / "paranoid_av";
+}
+
 void usage(const std::string &program) {
     std::cout << "Usage: " << program << " [options]\n"
               << "  --monitor                 Perform process inventory and heuristic analysis\n"
@@ -413,15 +632,24 @@ void usage(const std::string &program) {
               << "  --threat-intel-add <type> <value> Append indicator to in-memory set\n"
               << "  --threat-intel-save <file> Persist current indicators\n"
               << "  --system-audit            Run host persistence, module, and privilege hygiene checks\n"
+              << "  --rootkit-scan            Inspect kernel modules and artefacts for rootkit indicators\n"
               << "  --integrity-baseline <path> <baseline>  Generate file baseline for path\n"
               << "  --integrity-verify <path> <baseline>   Compare filesystem state to baseline\n"
               << "  --ransomware-watch <path> <seconds>    Observe filesystem activity for encryption\n"
               << "  --quarantine-file <path>  Move a file into quarantine\n"
               << "  --quarantine-pid <pid>    Send SIGTERM to process for containment\n"
               << "  --kill-pid <pid>          Force terminate process with SIGKILL\n"
+              << "  --usb-create <device> [workdir]  Flash bootable scanner onto USB device\n"
+              << "  --usb-workdir <path>      Override staging directory for USB creation\n"
+              << "  --usb-include-tor         Include Tor client packages in the USB image\n"
               << "  --tor-proxy <port>        Override Tor SOCKS proxy port (default 9050)\n"
               << "  --darkweb-port <port>     Override onion service port (default 80)\n"
               << "  --darkweb-scan <host> <path> <keywords>  Query onion service via Tor for leaks\n"
+              << "  --windows-root <path>     Override Windows directory when auditing repair manifests\n"
+              << "  --windows-repair-detect   Detect host Windows version and manifest key\n"
+              << "  --windows-repair-capture <windows-root> <version> <build> <key> <output>  Capture manifest from clean volume\n"
+              << "  --windows-repair-audit <manifest> [plan]  Compare Windows installation to manifest (optional plan output)\n"
+              << "  --windows-repair-collect <repository> <output> [manifest]  Detect host version, audit, and stage repairs\n"
               << "  --scan <path>             Run ClamAV signature scan on path\n"
               << "  --yara <rules> <path>     Execute YARA scan against path using rules\n"
               << "  --openai <path>           Submit file to OpenAI-assisted analysis\n"
@@ -452,10 +680,13 @@ int main(int argc, char *argv[]) {
     antivirus::OpenAIAnalyzer aiAnalyzer;
     antivirus::YaraScanner yaraScanner;
     antivirus::SystemInspector systemInspector;
+    antivirus::RootkitDetector rootkitDetector;
     antivirus::ThreatIntelDatabase threatIntel;
     antivirus::FileIntegrityMonitor integrityMonitor;
     antivirus::RansomwareMonitor ransomwareMonitor;
     antivirus::QuarantineManager quarantineManager;
+    antivirus::USBDeployer usbDeployer;
+    antivirus::WindowsRepairManager windowsRepairManager;
 
     heuristics.setThreatIntel(&threatIntel);
 
@@ -464,6 +695,10 @@ int main(int argc, char *argv[]) {
     std::optional<std::string> threatIntelPath;
     int torProxyPort = 9050;
     std::uint16_t darkWebPort = 80;
+    std::string usbWorkdir;
+    bool usbIncludeTor = false;
+    std::optional<fs::path> binaryPath;
+    std::optional<fs::path> windowsRootOverride;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -538,6 +773,12 @@ int main(int argc, char *argv[]) {
         if (arg == "--system-audit") {
             const auto findings = systemInspector.scanAll();
             printSystemFindings(findings);
+            continue;
+        }
+
+        if (arg == "--rootkit-scan") {
+            const auto findings = rootkitDetector.scan();
+            printRootkitReport(findings, jsonOutput);
             continue;
         }
 
@@ -619,6 +860,224 @@ int main(int argc, char *argv[]) {
                 std::cout << "[!] Sent " << (force ? "SIGKILL" : "SIGTERM") << " to PID " << pid << "\n";
             } else {
                 std::cerr << "Failed to signal PID " << pid << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--usb-workdir") {
+            if (i + 1 >= argc) {
+                std::cerr << "--usb-workdir requires a directory" << std::endl;
+                return 1;
+            }
+            usbWorkdir = argv[++i];
+            continue;
+        }
+
+        if (arg == "--usb-include-tor") {
+            usbIncludeTor = true;
+            continue;
+        }
+
+        if (arg == "--usb-create") {
+            if (i + 1 >= argc) {
+                std::cerr << "--usb-create requires a block device" << std::endl;
+                return 1;
+            }
+            const std::string device = argv[++i];
+            std::string workdir = usbWorkdir;
+            if (i + 1 < argc) {
+                const std::string next = argv[i + 1];
+                if (!next.empty() && next[0] != '-') {
+                    workdir = next;
+                    ++i;
+                }
+            }
+            if (!binaryPath) {
+                binaryPath = resolveSelfPath(argv[0]);
+            }
+            const auto result = usbDeployer.deploy(device, workdir, usbIncludeTor, binaryPath->string());
+            if (!result.output.empty()) {
+                std::cout << result.output;
+                if (result.output.back() != '\n') {
+                    std::cout << '\n';
+                }
+            }
+            if (result.success) {
+                std::cout << "[+] USB deployment completed successfully.\n";
+            } else {
+                std::cerr << "[!] USB deployment failed (exit code " << result.exitCode << ").\n";
+                return result.exitCode == 0 ? 1 : result.exitCode;
+            }
+            continue;
+        }
+
+        if (arg == "--windows-root") {
+            if (i + 1 >= argc) {
+                std::cerr << "--windows-root requires a directory" << std::endl;
+                return 1;
+            }
+            windowsRootOverride = fs::path(argv[++i]);
+            continue;
+        }
+
+        if (arg == "--windows-repair-detect") {
+            const auto info = windowsRepairManager.detectHostVersion();
+            if (!info) {
+                std::cerr << "Windows version detection unavailable on this platform. Supply --windows-root for offline analysis." << std::endl;
+                return 1;
+            }
+            if (jsonOutput) {
+                std::cout << "{\"success\":true,\"productName\":\"" << jsonEscape(info->productName)
+                          << "\",\"manifestKey\":\"" << jsonEscape(info->manifestKey)
+                          << "\",\"build\":\"" << jsonEscape(info->buildNumber) << "\"}\n";
+            } else {
+                std::cout << "[*] Detected " << info->productName << " build " << info->buildNumber
+                          << " (manifest key " << info->manifestKey << ")" << std::endl;
+            }
+            continue;
+        }
+
+        if (arg == "--windows-repair-capture") {
+            if (i + 5 >= argc) {
+                std::cerr << "--windows-repair-capture requires windows root, version, build, key, and output path" << std::endl;
+                return 1;
+            }
+            const fs::path windowsRoot = argv[++i];
+            const std::string versionLabel = argv[++i];
+            const std::string buildNumber = argv[++i];
+            const std::string manifestKey = argv[++i];
+            const fs::path outputPath = argv[++i];
+            const auto manifest = windowsRepairManager.captureBaseline(windowsRoot, versionLabel, buildNumber, manifestKey);
+            const bool saved = windowsRepairManager.saveManifest(manifest, outputPath);
+            if (jsonOutput) {
+                std::cout << "{\"saved\":" << (saved ? "true" : "false") << ",\"entries\":" << manifest.files.size()
+                          << ",\"output\":\"" << jsonEscape(outputPath.generic_string()) << "\"}\n";
+            } else {
+                if (saved) {
+                    std::cout << "[+] Captured " << manifest.files.size() << " baseline entries -> " << outputPath << "\n";
+                } else {
+                    std::cerr << "[!] Failed to write manifest to " << outputPath << std::endl;
+                    return 1;
+                }
+            }
+            if (!saved) {
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--windows-repair-audit") {
+            if (i + 1 >= argc) {
+                std::cerr << "--windows-repair-audit requires a manifest path" << std::endl;
+                return 1;
+            }
+            const fs::path manifestPath = argv[++i];
+            std::optional<fs::path> planPath;
+            if (i + 1 < argc) {
+                const std::string next = argv[i + 1];
+                if (!next.empty() && next[0] != '-') {
+                    planPath = fs::path(next);
+                    ++i;
+                }
+            }
+            fs::path windowsRoot;
+            if (windowsRootOverride) {
+                windowsRoot = *windowsRootOverride;
+            } else {
+                auto defaultRoot = windowsRepairManager.defaultWindowsRoot();
+                if (!defaultRoot) {
+                    std::cerr << "Provide --windows-root when auditing from non-Windows environments." << std::endl;
+                    return 1;
+                }
+                windowsRoot = *defaultRoot;
+            }
+            antivirus::WindowsManifest manifest;
+            try {
+                manifest = windowsRepairManager.loadManifest(manifestPath);
+            } catch (const std::exception &ex) {
+                std::cerr << "Failed to load manifest: " << ex.what() << std::endl;
+                return 1;
+            }
+            const auto plan = windowsRepairManager.analyze(windowsRoot, manifest);
+            bool planSaved = false;
+            if (planPath) {
+                planSaved = windowsRepairManager.savePlan(plan, *planPath);
+            }
+            if (jsonOutput) {
+                std::cout << "{\n  \"plan\": ";
+                writeWindowsPlanJson(std::cout, plan, "  ");
+                if (planPath) {
+                    std::cout << ",\n  \"planPath\": {\"path\": \"" << jsonEscape(planPath->generic_string())
+                              << "\", \"saved\": " << (planSaved ? "true" : "false") << "}";
+                }
+                std::cout << "\n}\n";
+            } else {
+                printWindowsRepairPlan(plan, false);
+                if (planPath) {
+                    std::cout << (planSaved ? "[+]" : "[!]") << " Plan output " << planPath->string();
+                    if (!planSaved) {
+                        std::cout << " (failed to write)";
+                    }
+                    std::cout << "\n";
+                }
+            }
+            if (!plan.errors.empty()) {
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--windows-repair-collect") {
+            if (i + 2 >= argc) {
+                std::cerr << "--windows-repair-collect requires repository and output directories" << std::endl;
+                return 1;
+            }
+            const fs::path repositoryRoot = argv[++i];
+            const fs::path outputDir = argv[++i];
+            std::optional<fs::path> manifestOverride;
+            if (i + 1 < argc) {
+                const std::string next = argv[i + 1];
+                if (!next.empty() && next[0] != '-') {
+                    manifestOverride = fs::path(next);
+                    ++i;
+                }
+            }
+            auto versionInfo = windowsRepairManager.detectHostVersion();
+            if (!versionInfo && !manifestOverride) {
+                std::cerr << "Unable to detect Windows version. Provide an explicit manifest path." << std::endl;
+                return 1;
+            }
+            fs::path manifestPath;
+            if (manifestOverride) {
+                manifestPath = *manifestOverride;
+            } else {
+                manifestPath = repositoryRoot / (versionInfo->manifestKey + ".manifest");
+            }
+            antivirus::WindowsManifest manifest;
+            try {
+                manifest = windowsRepairManager.loadManifest(manifestPath);
+            } catch (const std::exception &ex) {
+                std::cerr << "Failed to load manifest: " << ex.what() << std::endl;
+                return 1;
+            }
+            fs::path windowsRoot;
+            if (windowsRootOverride) {
+                windowsRoot = *windowsRootOverride;
+            } else {
+                auto defaultRoot = windowsRepairManager.defaultWindowsRoot();
+                if (!defaultRoot) {
+                    std::cerr << "Provide --windows-root when staging repairs from non-Windows environments." << std::endl;
+                    return 1;
+                }
+                windowsRoot = *defaultRoot;
+            }
+            const auto plan = windowsRepairManager.analyze(windowsRoot, manifest);
+            const auto stage = windowsRepairManager.stageRepairs(repositoryRoot, plan, outputDir);
+            const fs::path planPath = outputDir / (manifest.manifestKey + "_plan.txt");
+            const bool planSaved = windowsRepairManager.savePlan(plan, planPath);
+            printWindowsCollection(plan, stage, jsonOutput, planPath, planSaved);
+            if (!stage.errors.empty() || !stage.missingSources.empty()) {
                 return 1;
             }
             continue;
