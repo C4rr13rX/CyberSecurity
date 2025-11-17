@@ -277,10 +277,20 @@ function Invoke-ProcessChecked {
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $psi
     $process.Start() | Out-Null
-    $process.WaitForExit()
-    Write-Host $process.StandardOutput.ReadToEnd()
+
+    while (-not $process.HasExited -or -not $process.StandardOutput.EndOfStream -or -not $process.StandardError.EndOfStream) {
+        while (-not $process.StandardOutput.EndOfStream) {
+            $line = $process.StandardOutput.ReadLine()
+            if ($line -ne $null) { Write-Host $line }
+        }
+        while (-not $process.StandardError.EndOfStream) {
+            $line = $process.StandardError.ReadLine()
+            if ($line -ne $null) { Write-Host $line -ForegroundColor Red }
+        }
+        Start-Sleep -Milliseconds 50
+    }
+
     if ($process.ExitCode -ne 0) {
-        Write-Error $process.StandardError.ReadToEnd()
         throw "Command '$FilePath $Arguments' failed with exit code $($process.ExitCode)."
     }
 }

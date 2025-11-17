@@ -39,9 +39,32 @@ This produces the `paranoid_av` executable. The project targets C++20 and depend
 
 Three PowerShell helpers under `scripts/` streamline the full Windows toolchain setup:
 
-1. `scripts/install_dependencies.ps1` – installs Visual Studio Build Tools, CMake, Ninja, Git, Python, Node.js, NSIS, Qt, and `vswhere` via `winget` (or Chocolatey as a fallback). Run from an elevated shell.
-2. `scripts/build_windows.ps1 [-Configuration Release] [-Package] [-RunTests]` – detects the newest Visual Studio (2017–2022), configures the correct generator, builds the native binary plus Ionic/Electron UI, and optionally produces the NSIS installer through CPack.
-3. `scripts/install_suite.ps1 [-InstallerPath path\to\setup.exe] [-Silent]` – locates the latest installer produced by the build script (or uses the provided path) and launches it interactively or unattended.
+1. `scripts/install_dependencies.ps1` - installs Visual Studio Build Tools, CMake, Ninja, Git, Python, Node.js, NSIS, Qt, and `vswhere` via `winget` (or Chocolatey as a fallback). Run from an elevated shell.
+2. `scripts/build_windows.ps1 [-Configuration Release] [-Package] [-RunTests]` - detects the newest Visual Studio (2017-2022), configures the correct generator, builds the native binary plus Ionic/Electron UI, and optionally produces the NSIS installer through CPack.
+3. `scripts/install_suite.ps1 [-InstallerPath path\to\setup.exe] [-Silent]` - locates the latest installer produced by the build script (or uses the provided path) and launches it interactively or unattended.
+
+### One-shot Windows setup
+
+For repeatable end-to-end provisioning there is now a hardened orchestrator: `scripts/setup_paranoid.ps1`. It enforces elevation, runs a transcript log, and executes the dependency install, build, and installation phases sequentially. Typical usage from an elevated PowerShell prompt:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
+    -File .\scripts\setup_paranoid.ps1 `
+    -Configuration Release `
+    -SilentInstall
+```
+
+Useful switches:
+
+| Switch | Effect |
+| --- | --- |
+| `-SkipDependencies` | Assume the build toolchain is already present. |
+| `-SkipBuild` | Reuse a previously packaged installer. |
+| `-SkipInstall` | Produce the installer without launching it (useful for CI). |
+| `-InstallerPath <path>` | Force a specific installer when multiple builds exist. |
+| `-LogDirectory <path>` | Override the transcript directory (default: `<repo>/logs`). |
+
+Transcript logs are emitted to `<repo>/logs/setup_YYYYMMDD_HHMMSS.log`, making failures easy to diagnose.
 
 Example end-to-end workflow on Windows:
 
@@ -53,6 +76,12 @@ pwsh scripts/install_suite.ps1
 ```
 
 The build script emits rich error messages whenever Visual Studio or toolchain prerequisites are missing, so issues can be triaged quickly. Generated installers live under `build/` in the `_CPack_Packages` tree and expose a GUI backed by NSIS.
+
+> **Note**: the NSIS package currently deploys the C++ command-line interface. The Ionic/Angular bundle is compiled (see `ui/dist/`) but is not yet wrapped inside the Windows installer—launch `paranoid_av.exe` with the desired arguments (e.g., `paranoid_av.exe --monitor`) from an elevated terminal.
+
+### Runtime shutdown log
+
+Every invocation of `paranoid_av.exe` now records its lifecycle under `%PROGRAMDATA%\ParanoidAntivirusSuite\logs\shutdown.log` (or `~/.paranoid_av/logs/shutdown.log` outside Windows). The log captures the full command line, runtime duration, and exit code so unexpected exits can be correlated even when the window closes immediately. Inspect this file first when troubleshooting operator-side issues.
 
 ### Paranoid Desktop Console (Ionic + Electron)
 

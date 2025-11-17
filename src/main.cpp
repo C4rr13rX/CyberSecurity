@@ -19,10 +19,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <ctime>
 #include <optional>
 #include <sstream>
 #include <thread>
@@ -122,6 +124,83 @@ bool isProtocolToken(const std::string &value) {
     const std::string lower = toLowerCopy(value);
     return lower == "tcp" || lower == "udp" || lower == "any" || lower == "all";
 }
+
+fs::path resolveLogDirectory() {
+#ifdef _WIN32
+    if (const char *programData = std::getenv("PROGRAMDATA")) {
+        return fs::path(programData) / "ParanoidAntivirusSuite" / "logs";
+    }
+#endif
+    if (const char *home = std::getenv("HOME")) {
+        return fs::path(home) / ".paranoid_av" / "logs";
+    }
+    return fs::current_path() / "logs";
+}
+
+std::string formatTimestamp(const std::chrono::system_clock::time_point &tp) {
+    std::time_t tt = std::chrono::system_clock::to_time_t(tp);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &tt);
+#else
+    gmtime_r(&tt, &tm);
+#endif
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+    return oss.str();
+}
+
+std::string joinArguments(int argc, char *argv[]) {
+    std::ostringstream oss;
+    for (int i = 0; i < argc; ++i) {
+        if (i > 0) {
+            oss << ' ';
+        }
+        const std::string arg = argv[i] ? argv[i] : "";
+        if (arg.find(' ') != std::string::npos) {
+            oss << '"' << arg << '"';
+        } else {
+            oss << arg;
+        }
+    }
+    return oss.str();
+}
+
+class ShutdownLogger {
+  public:
+    ShutdownLogger(int argc, char *argv[]) : startTime(std::chrono::system_clock::now()) {
+        const auto logDir = resolveLogDirectory();
+        std::error_code ec;
+        fs::create_directories(logDir, ec);
+        logPath = logDir / "shutdown.log";
+        stream.open(logPath, std::ios::app);
+        if (stream) {
+            stream << "[" << formatTimestamp(startTime) << "] "
+                   << "START command=\"" << joinArguments(argc, argv) << "\"\n";
+            stream.flush();
+        }
+    }
+
+    void logExit(int code, const std::string &message = std::string()) {
+        if (!stream) {
+            return;
+        }
+        const auto end = std::chrono::system_clock::now();
+        stream << "[" << formatTimestamp(end) << "] "
+               << "EXIT code=" << code << " runtime="
+               << std::chrono::duration_cast<std::chrono::seconds>(end - startTime).count() << "s";
+        if (!message.empty()) {
+            stream << " message=\"" << message << "\"";
+        }
+        stream << "\n";
+        stream.flush();
+    }
+
+  private:
+    fs::path logPath;
+    std::ofstream stream;
+    std::chrono::system_clock::time_point startTime;
+};
 
 void printProcessReportTable(const std::vector<antivirus::ProcessInfo> &processes) {
     std::cout << std::left << std::setw(8) << "PID" << std::setw(12) << "USER" << std::setw(8) << "RISK" << std::setw(20)
@@ -837,11 +916,28 @@ std::string readFile(const fs::path &path) {
 
 } // namespace
 
-int main(int argc, char *argv[]) {
+int RunApplication(int argc, char *argv[]) {
     if (argc == 1) {
         usage(argv[0]);
-        return 0;
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
+    ShutdownLogger shutdownLogger(argc, argv);
+    try {
+        const int exitCode = RunApplication(argc, argv);
+        shutdownLogger.logExit(exitCode);
+        return exitCode;
+    } catch (const std::exception &ex) {
+        std::cerr << "Fatal error: " << ex.what() << std::endl;
+        shutdownLogger.logExit(1, ex.what());
+        return 1;
+    } catch (...) {
+        std::cerr << "Fatal unknown error encountered." << std::endl;
+        shutdownLogger.logExit(1, "Unknown error");
+        return 1;
     }
+}
 
     antivirus::ProcessScanner processScanner;
     antivirus::HeuristicAnalyzer heuristics;
