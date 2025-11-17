@@ -16,6 +16,7 @@ class SystemInspector {
   public:
     std::vector<SystemFinding> scanAll() const;
 
+#ifndef _WIN32
   private:
     void scanKernelModules(std::vector<SystemFinding> &findings) const;
     void scanPersistenceArtifacts(std::vector<SystemFinding> &findings) const;
@@ -27,6 +28,7 @@ class SystemInspector {
     void scanSshConfig(std::vector<SystemFinding> &findings) const;
 
     static bool isSuspiciousPath(const std::string &path);
+#endif
 };
 
 } // namespace antivirus

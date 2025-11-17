@@ -8,15 +8,18 @@ import { Observable } from 'rxjs';
   styleUrls: ['./firewall.page.scss']
 })
 export class FirewallPage implements OnInit {
-  firewallStatus$: Observable<FirewallStatus | null> = this.backend.firewallStatus$;
-  securityProducts$: Observable<SecurityCenterProduct[]> = this.backend.securityCenterProducts$;
+  firewallStatus$: Observable<FirewallStatus | null>;
+  securityProducts$: Observable<SecurityCenterProduct[]>;
 
   appRule = { path: '', label: '', direction: 'both' };
   portRule = { port: '', protocol: 'TCP', direction: 'both', label: '' };
   policyPath = '';
   registerForm = { name: '', path: '', reporting: '', mode: 'both', guid: '' };
 
-  constructor(private backend: BackendService) {}
+  constructor(private backend: BackendService) {
+    this.firewallStatus$ = this.backend.firewallStatus$;
+    this.securityProducts$ = this.backend.securityCenterProducts$;
+  }
 
   async ngOnInit(): Promise<void> {
     await this.refreshAll();

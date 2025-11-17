@@ -1,5 +1,7 @@
 #include "AntivirusSuite/RootkitDetector.hpp"
 
+#ifndef _WIN32
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -256,3 +258,14 @@ void RootkitDetector::scanKernelInterfaceProtection(std::vector<RootkitFinding> 
 
 } // namespace antivirus
 
+#else
+
+namespace antivirus {
+
+std::vector<RootkitFinding> RootkitDetector::scan() const {
+    return {};
+}
+
+} // namespace antivirus
+
+#endif // _WIN32

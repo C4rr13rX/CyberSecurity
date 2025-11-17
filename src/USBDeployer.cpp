@@ -10,6 +10,15 @@
 #include <sys/wait.h>
 #endif
 
+#ifdef _WIN32
+#ifndef popen
+#define popen _popen
+#endif
+#ifndef pclose
+#define pclose _pclose
+#endif
+#endif
+
 namespace fs = std::filesystem;
 
 namespace antivirus {

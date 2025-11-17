@@ -1,12 +1,17 @@
 #include "AntivirusSuite/QuarantineManager.hpp"
 
-#include <csignal>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <csignal>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -30,16 +35,29 @@ std::string QuarantineManager::quarantineFile(const std::string &path) const {
         throw std::runtime_error("Unable to move file to quarantine: " + ec.message());
     }
 
+#ifndef _WIN32
     ::chmod(destination.c_str(), 0600);
+#endif
     return destination.string();
 }
 
 bool QuarantineManager::terminateProcess(int pid, bool force) const {
+#ifdef _WIN32
+    const DWORD exitCode = force ? 1 : 0;
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, static_cast<DWORD>(pid));
+    if (!process) {
+        return false;
+    }
+    const BOOL terminated = TerminateProcess(process, exitCode);
+    CloseHandle(process);
+    return terminated == TRUE;
+#else
     const int signal = force ? SIGKILL : SIGTERM;
     if (::kill(pid, signal) != 0) {
         return false;
     }
     return true;
+#endif
 }
 
 } // namespace antivirus

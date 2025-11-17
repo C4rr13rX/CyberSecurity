@@ -1,0 +1,9 @@
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/paranoid_av.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/package.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/package_source.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/edit_cache.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/rebuild_cache.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/list_install_components.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/install.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/install/local.dir
+/mnt/c/Users/Adam/Projects/CyberSecurity/build-linux/CMakeFiles/install/strip.dir

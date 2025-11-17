@@ -61,6 +61,7 @@ class ProcessScanner {
   public:
     std::vector<ProcessInfo> snapshotProcesses() const;
 
+#ifndef _WIN32
   private:
     static bool isNumericDirectory(const std::string &value);
     static std::string readFile(const std::string &path, bool replaceNull = true);
@@ -74,6 +75,7 @@ class ProcessScanner {
     static std::vector<std::string> parseCapabilities(const std::string &hexMask);
     static std::unordered_map<std::string, std::string> parseEnvironment(const std::string &path);
     static bool isWorldWritable(const std::string &path);
+#endif
 };
 
 } // namespace antivirus

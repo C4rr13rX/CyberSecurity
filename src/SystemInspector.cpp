@@ -1,5 +1,7 @@
 #include "AntivirusSuite/SystemInspector.hpp"
 
+#ifndef _WIN32
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -442,3 +444,14 @@ void SystemInspector::scanSshConfig(std::vector<SystemFinding> &findings) const 
 
 } // namespace antivirus
 
+#else
+
+namespace antivirus {
+
+std::vector<SystemFinding> SystemInspector::scanAll() const {
+    return {};
+}
+
+} // namespace antivirus
+
+#endif // _WIN32

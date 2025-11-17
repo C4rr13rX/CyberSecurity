@@ -18,12 +18,14 @@ class RootkitDetector {
   public:
     std::vector<RootkitFinding> scan() const;
 
+#ifndef _WIN32
   private:
     void scanSuspiciousModules(std::vector<RootkitFinding> &findings) const;
     void scanHiddenModules(std::vector<RootkitFinding> &findings) const;
     void scanModuleParameters(std::vector<RootkitFinding> &findings) const;
     void scanFilesystemArtifacts(std::vector<RootkitFinding> &findings) const;
     void scanKernelInterfaceProtection(std::vector<RootkitFinding> &findings) const;
+#endif
 };
 
 } // namespace antivirus

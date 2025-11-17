@@ -1,1 +1,11 @@
 /build/
+node_modules/
+dist/
+/.angular/
+/ui/node_modules/
+/ui/dist/
+/ui/.angular/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

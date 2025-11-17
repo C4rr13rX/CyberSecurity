@@ -1,8 +1,18 @@
 #include "AntivirusSuite/OpenAIAnalyzer.hpp"
 
 #include <array>
+#include <cstdio>
 #include <cstdlib>
 #include <sstream>
+
+#ifdef _WIN32
+#ifndef popen
+#define popen _popen
+#endif
+#ifndef pclose
+#define pclose _pclose
+#endif
+#endif
 
 namespace antivirus {
 

@@ -1,5 +1,17 @@
 #include "AntivirusSuite/ProcessScanner.hpp"
 
+#ifdef _WIN32
+
+namespace antivirus {
+
+std::vector<ProcessInfo> ProcessScanner::snapshotProcesses() const {
+    return {};
+}
+
+} // namespace antivirus
+
+#else
+
 #include "AntivirusSuite/Crypto.hpp"
 
 #include <arpa/inet.h>
@@ -398,3 +410,5 @@ bool ProcessScanner::isWorldWritable(const std::string &path) {
 }
 
 } // namespace antivirus
+
+#endif // _WIN32

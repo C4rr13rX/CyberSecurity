@@ -1,5 +1,19 @@
 #include "AntivirusSuite/RansomwareMonitor.hpp"
 
+#ifdef _WIN32
+
+namespace antivirus {
+
+RansomwareSummary RansomwareMonitor::watch(const std::string &path, std::chrono::seconds) const {
+    RansomwareSummary summary;
+    summary.findings.push_back({path, "Ransomware monitoring requires Linux inotify support."});
+    return summary;
+}
+
+} // namespace antivirus
+
+#else
+
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -134,4 +148,6 @@ bool RansomwareMonitor::isEncryptionExtension(const std::string &path) {
 }
 
 } // namespace antivirus
+
+#endif // _WIN32
 

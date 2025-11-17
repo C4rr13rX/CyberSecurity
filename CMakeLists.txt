@@ -29,7 +29,10 @@ add_executable(paranoid_av
 
 target_include_directories(paranoid_av PRIVATE include)
 
-target_compile_options(paranoid_av PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(paranoid_av PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /EHsc>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+)
 
 find_package(Threads REQUIRED)
 target_link_libraries(paranoid_av PRIVATE Threads::Threads)

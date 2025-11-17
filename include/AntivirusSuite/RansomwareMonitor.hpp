@@ -25,8 +25,10 @@ class RansomwareMonitor {
   public:
     RansomwareSummary watch(const std::string &path, std::chrono::seconds duration) const;
 
+#ifndef _WIN32
   private:
     static bool isEncryptionExtension(const std::string &path);
+#endif
 };
 
 } // namespace antivirus

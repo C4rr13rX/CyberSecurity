@@ -1,7 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/angular-cli",
   "version": 1,
-  "defaultProject": "paranoid-av-ui",
   "projects": {
     "paranoid-av-ui": {
       "projectType": "application",
@@ -30,6 +29,12 @@
           },
           "configurations": {
             "production": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.prod.ts"
+                }
+              ],
               "budgets": [
                 {
                   "type": "initial",
@@ -71,5 +76,8 @@
         }
       }
     }
+  },
+  "cli": {
+    "defaultProject": "paranoid-av-ui"
   }
 }

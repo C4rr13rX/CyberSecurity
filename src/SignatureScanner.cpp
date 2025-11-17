@@ -6,6 +6,15 @@
 #include <sstream>
 #include <stdexcept>
 
+#ifdef _WIN32
+#ifndef popen
+#define popen _popen
+#endif
+#ifndef pclose
+#define pclose _pclose
+#endif
+#endif
+
 namespace antivirus {
 
 namespace {

@@ -1,5 +1,7 @@
 #include "AntivirusSuite/TorClient.hpp"
 
+#ifndef _WIN32
+
 #include <algorithm>
 #include <arpa/inet.h>
 #include <chrono>
@@ -292,4 +294,28 @@ TorHttpResponse TorClient::httpGet(const std::string &host, std::uint16_t port, 
 }
 
 } // namespace antivirus
+
+#else
+
+namespace antivirus {
+
+TorClient::TorClient(std::string host, std::uint16_t port) : proxyHost(std::move(host)), proxyPort(port) {}
+
+TorHttpResponse TorClient::httpRequest(const std::string &, const std::string &, std::uint16_t,
+                                       const std::string &, const std::vector<std::pair<std::string, std::string>> &,
+                                       const std::string &, int, int) const {
+    TorHttpResponse response;
+    response.statusCode = 0;
+    response.body = "Tor client is not supported on Windows builds.";
+    return response;
+}
+
+TorHttpResponse TorClient::httpGet(const std::string &host, std::uint16_t port, const std::string &path,
+                                   int timeoutSeconds) const {
+    return httpRequest("GET", host, port, path, {}, std::string(), timeoutSeconds, 0);
+}
+
+} // namespace antivirus
+
+#endif // _WIN32
 
