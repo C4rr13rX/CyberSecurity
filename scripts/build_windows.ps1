@@ -307,11 +307,13 @@ Invoke-ProcessChecked -FilePath "cmake" -Arguments "--build `"$buildDir`" --conf
 
 Write-Host "Building Ionic/Electron shell..." -ForegroundColor Cyan
 $uiDir = Join-Path $repoRoot "ui"
-$shouldBuildUi = ($env:PARANOID_BUILD_UI -eq "1")
-if (-not $shouldBuildUi) {
-    Write-Warning "PARANOID_BUILD_UI is not set to 1. Skipping UI build to avoid network-heavy npm operations."
+$shouldBuildUi = $true
+if ($env:PARANOID_BUILD_UI) {
+    if ($env:PARANOID_BUILD_UI -in @("0","false","False","FALSE")) {
+        $shouldBuildUi = $false
+    }
 }
-else {
+if ($shouldBuildUi) {
     $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
     if (-not $npmCmd -or $npmCmd.CommandType -ne 'Application') {
         $npmCmd = Get-Command npm -ErrorAction SilentlyContinue | Where-Object { $_.CommandType -eq 'Application' } | Select-Object -First 1
@@ -324,6 +326,9 @@ else {
     else {
         Write-Warning "npm is not available on PATH, skipping UI build. Install Node.js and rerun to build the shell."
     }
+}
+else {
+    Write-Warning "PARANOID_BUILD_UI requested to skip UI build. Set it to 1 (or unset) to include the Ionic/Electron shell."
 }
 
 if ($RunTests) {
