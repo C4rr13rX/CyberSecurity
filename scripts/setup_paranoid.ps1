@@ -62,7 +62,7 @@ function Invoke-Step {
     param(
         [string]$Name,
         [string]$RelativeScript,
-        [object[]]$Arguments
+        [object[]]$Arguments = @()
     )
     $fullPath = Join-Path $scriptRoot $RelativeScript
     if (-not (Test-Path $fullPath)) {
