@@ -919,25 +919,8 @@ std::string readFile(const fs::path &path) {
 int RunApplication(int argc, char *argv[]) {
     if (argc == 1) {
         usage(argv[0]);
-    return 0;
-}
-
-int main(int argc, char *argv[]) {
-    ShutdownLogger shutdownLogger(argc, argv);
-    try {
-        const int exitCode = RunApplication(argc, argv);
-        shutdownLogger.logExit(exitCode);
-        return exitCode;
-    } catch (const std::exception &ex) {
-        std::cerr << "Fatal error: " << ex.what() << std::endl;
-        shutdownLogger.logExit(1, ex.what());
-        return 1;
-    } catch (...) {
-        std::cerr << "Fatal unknown error encountered." << std::endl;
-        shutdownLogger.logExit(1, "Unknown error");
-        return 1;
+        return 0;
     }
-}
 
     antivirus::ProcessScanner processScanner;
     antivirus::HeuristicAnalyzer heuristics;
@@ -1657,4 +1640,21 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+}
+
+int main(int argc, char *argv[]) {
+    ShutdownLogger shutdownLogger(argc, argv);
+    try {
+        const int exitCode = RunApplication(argc, argv);
+        shutdownLogger.logExit(exitCode);
+        return exitCode;
+    } catch (const std::exception &ex) {
+        std::cerr << "Fatal error: " << ex.what() << std::endl;
+        shutdownLogger.logExit(1, ex.what());
+        return 1;
+    } catch (...) {
+        std::cerr << "Fatal unknown error encountered." << std::endl;
+        shutdownLogger.logExit(1, "Unknown error");
+        return 1;
+    }
 }

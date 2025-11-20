@@ -62,14 +62,14 @@ function Invoke-Step {
     param(
         [string]$Name,
         [string]$RelativeScript,
-        [object[]]$Arguments = @()
+        [ScriptBlock]$Invoker
     )
     $fullPath = Join-Path $scriptRoot $RelativeScript
     if (-not (Test-Path $fullPath)) {
         throw "Unable to locate $Name script at '$RelativeScript'."
     }
     Write-Host "=== $Name ===" -ForegroundColor Cyan
-    & $fullPath @Arguments
+    & $Invoker $fullPath
     Write-Host "=== $Name completed ===" -ForegroundColor Green
 }
 
@@ -80,29 +80,37 @@ Write-Host "Transcript: $transcriptPath" -ForegroundColor DarkGray
 Push-Location $repoRoot
 try {
     if (-not $SkipDependencies) {
-        Invoke-Step -Name "Dependency installation" -RelativeScript "install_dependencies.ps1"
+        Invoke-Step -Name "Dependency installation" -RelativeScript "install_dependencies.ps1" -Invoker {
+            param($scriptPath)
+            & $scriptPath
+        }
     }
     else {
         Write-Host "[skip] Dependency installation" -ForegroundColor Yellow
     }
 
     if (-not $SkipBuild) {
-        $buildArgs = @("-Configuration", $Configuration, "-Package")
-        Invoke-Step -Name "Build & package" -RelativeScript "build_windows.ps1" -Arguments $buildArgs
+        Invoke-Step -Name "Build & package" -RelativeScript "build_windows.ps1" -Invoker {
+            param($scriptPath)
+            & $scriptPath -Configuration $using:Configuration -Package
+        }
     }
     else {
         Write-Host "[skip] Build & package" -ForegroundColor Yellow
     }
 
     if (-not $SkipInstall) {
-        $installArgs = @()
-        if ($InstallerPath) {
-            $installArgs += @("-InstallerPath", $InstallerPath)
+        Invoke-Step -Name "Installer execution" -RelativeScript "install_suite.ps1" -Invoker {
+            param($scriptPath)
+            $argsList = @()
+            if ($using:InstallerPath) {
+                $argsList += @("-InstallerPath", $using:InstallerPath)
+            }
+            if ($using:SilentInstall) {
+                $argsList += "-Silent"
+            }
+            & $scriptPath @argsList
         }
-        if ($SilentInstall) {
-            $installArgs += "-Silent"
-        }
-        Invoke-Step -Name "Installer execution" -RelativeScript "install_suite.ps1" -Arguments $installArgs
     }
     else {
         Write-Host "[skip] Installer execution" -ForegroundColor Yellow
