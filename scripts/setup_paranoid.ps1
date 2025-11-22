@@ -92,7 +92,7 @@ try {
     if (-not $SkipBuild) {
         Invoke-Step -Name "Build & package" -RelativeScript "build_windows.ps1" -Invoker {
             param($scriptPath)
-            & $scriptPath -Configuration $using:Configuration -Package
+            & $scriptPath -Configuration $Configuration -Package
         }
     }
     else {
@@ -102,14 +102,14 @@ try {
     if (-not $SkipInstall) {
         Invoke-Step -Name "Installer execution" -RelativeScript "install_suite.ps1" -Invoker {
             param($scriptPath)
-            $argsList = @()
-            if ($using:InstallerPath) {
-                $argsList += @("-InstallerPath", $using:InstallerPath)
+            $installArgs = @{}
+            if ($InstallerPath) {
+                $installArgs["InstallerPath"] = $InstallerPath
             }
-            if ($using:SilentInstall) {
-                $argsList += "-Silent"
+            if ($SilentInstall) {
+                $installArgs["Silent"] = $true
             }
-            & $scriptPath @argsList
+            & $scriptPath @installArgs
         }
     }
     else {

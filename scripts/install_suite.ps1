@@ -8,15 +8,64 @@
     Optional explicit path to the installer .exe. If omitted the script searches under build/.
 .PARAMETER Silent
     Runs the NSIS installer in unattended mode.
+.PARAMETER SkipLaunch
+    Suppresses automatic GUI launch after installation completes.
 #>
 [CmdletBinding()]
 param(
     [string]$InstallerPath,
-    [switch]$Silent
+    [switch]$Silent,
+    [switch]$SkipLaunch
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+
+function Get-ParanoidInstallPath {
+    $roots = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+    )
+    foreach ($root in $roots) {
+        if (-not (Test-Path $root)) { continue }
+        foreach ($key in Get-ChildItem $root) {
+            try {
+                $displayName = $key.GetValue("DisplayName")
+                if ($displayName -and ($displayName -eq "Paranoid Antivirus Suite")) {
+                    $installLocation = $key.GetValue("InstallLocation")
+                    if ($installLocation -and (Test-Path $installLocation)) {
+                        return $installLocation
+                    }
+                    $uninstallString = $key.GetValue("UninstallString")
+                    if ($uninstallString) {
+                        $expanded = [Environment]::ExpandEnvironmentVariables($uninstallString).Trim('"')
+                        $candidate = Split-Path $expanded -Parent
+                        if ($candidate -and (Test-Path $candidate)) {
+                            return $candidate
+                        }
+                    }
+                }
+            }
+            catch {
+                continue
+            }
+        }
+    }
+    return $null
+}
+
+function Invoke-ParanoidGuiLaunch {
+    param([string]$InstallRoot)
+
+    $launcher = Join-Path (Join-Path $InstallRoot "bin") "paranoid_gui.cmd"
+    if (-not (Test-Path $launcher)) {
+        Write-Warning "Paranoid GUI launcher not found at '$launcher'."
+        return
+    }
+
+    Write-Host "Launching Paranoid Antivirus GUI..." -ForegroundColor Cyan
+    Start-Process -FilePath $launcher | Out-Null
+}
 
 if (-not $InstallerPath) {
     $candidates = Get-ChildItem -Path (Join-Path $repoRoot "build") -Filter "*ParanoidAntivirusSuite*.exe" -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
@@ -42,3 +91,12 @@ if ($process.ExitCode -ne 0) {
 }
 
 Write-Host "Installation completed." -ForegroundColor Green
+if (-not $SkipLaunch) {
+    $installRoot = Get-ParanoidInstallPath
+    if ($installRoot) {
+        Invoke-ParanoidGuiLaunch -InstallRoot $installRoot
+    }
+    else {
+        Write-Warning "Unable to determine installation directory. GUI launch skipped."
+    }
+}

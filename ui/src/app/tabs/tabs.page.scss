@@ -1,5 +1,292 @@
-ion-tab-button {
-  ion-icon {
-    font-size: 1.25rem;
+@use '../../theme/branding' as brand;
+
+:host {
+  display: block;
+}
+
+.command-shell {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  padding: 2rem;
+  min-height: calc(100vh - 4rem);
+}
+
+.command-shell__body {
+  @include brand.glass-panel;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.command-shell__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.command-shell__header h1 {
+  margin: 0.1rem 0;
+  font-size: clamp(1.8rem, 2.4vw, 2.8rem);
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.45em;
+  font-size: 0.72rem;
+  margin: 0;
+  color: rgba(239, 246, 255, 0.65);
+}
+
+.lede {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0.35rem 0 0;
+}
+
+.command-shell__metrics {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.metric-card {
+  @include brand.elevated-card;
+  padding: 1rem 1.25rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  min-width: 180px;
+}
+
+.metric-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--paranoid-gradient-accent);
+  color: #041024;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+}
+
+.metric-card__body p {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.metric-card__body h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1.6rem;
+}
+
+.command-shell__modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.1rem;
+}
+
+.module-card {
+  @include brand.elevated-card;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-left: 4px solid rgba(18, 194, 233, 0.5);
+}
+
+.module-card__content {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.module-card__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+}
+
+.module-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.module-card p {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.command-shell__viewport {
+  @include brand.elevated-card;
+  padding: 0;
+  overflow: hidden;
+}
+
+.command-shell__feed {
+  @include brand.elevated-card;
+  padding: 1.25rem;
+}
+
+.feed-title {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 0.75rem;
+}
+
+.feed-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.feed-entry {
+  display: flex;
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+.feed-entry span {
+  font-family: 'Fira Code', monospace;
+  color: rgba(93, 220, 255, 0.8);
+}
+
+.command-shell__nav {
+  @include brand.glass-panel;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.brand-block {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.brand-block img {
+  width: 48px;
+  height: 48px;
+}
+
+.brand-block p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.brand-block small {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.subscription-card {
+  @include brand.elevated-card;
+  padding: 0.9rem 1.1rem;
+  border-left: 4px solid rgba(93, 220, 255, 0.4);
+}
+
+.subscription-card__title {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.subscription-card__title ion-icon {
+  font-size: 1.3rem;
+  color: rgba(93, 220, 255, 0.9);
+}
+
+.subscription-card__title p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.subscription-card__title small {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.subscription-card__body p {
+  margin: 0.2rem 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.nav-item {
+  display: flex;
+  gap: 0.8rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  text-align: left;
+  transition: border 0.2s ease, transform 0.2s ease;
+}
+
+.nav-item ion-icon {
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.nav-item--active {
+  border-color: rgba(93, 220, 255, 0.4);
+  background: rgba(18, 194, 233, 0.08);
+  transform: translateX(-4px);
+}
+
+.nav-label {
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+
+.nav-copy {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.nav-footer {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+
+.nav-footer code {
+  font-family: 'Fira Code', monospace;
+  color: #5ddcff;
+}
+
+@media (max-width: 1100px) {
+  .command-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .command-shell__nav {
+    order: -1;
   }
 }

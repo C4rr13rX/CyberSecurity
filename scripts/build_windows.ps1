@@ -295,6 +295,49 @@ function Invoke-ProcessChecked {
     }
 }
 
+function Sync-GuiArtifacts {
+    param(
+        [string]$UiDirectory,
+        [string]$StageRoot
+    )
+
+    if (-not (Test-Path $UiDirectory)) {
+        throw "UI directory '$UiDirectory' not found."
+    }
+
+    if (Test-Path $StageRoot) {
+        Remove-Item $StageRoot -Recurse -Force
+    }
+
+    $appStage = Join-Path $StageRoot "app"
+    $runtimeStage = Join-Path $StageRoot "runtime"
+    New-Item -ItemType Directory -Path $appStage,$runtimeStage | Out-Null
+
+    $runtimePackage = Join-Path $UiDirectory "package.runtime.json"
+    if (-not (Test-Path $runtimePackage)) {
+        throw "Missing package.runtime.json under '$UiDirectory'."
+    }
+    Copy-Item $runtimePackage (Join-Path $appStage "package.json") -Force
+
+    $electronSource = Join-Path $UiDirectory "electron"
+    if (-not (Test-Path $electronSource)) {
+        throw "Electron entry point directory '$electronSource' not found."
+    }
+    Copy-Item $electronSource (Join-Path $appStage "electron") -Recurse -Force
+
+    $distSource = Join-Path $UiDirectory "dist"
+    if (-not (Test-Path $distSource)) {
+        throw "Angular build output not found at '$distSource'. Ensure 'npm run build' succeeded."
+    }
+    Copy-Item $distSource (Join-Path $appStage "dist") -Recurse -Force
+
+    $electronRuntime = Join-Path $UiDirectory "node_modules" "electron" "dist"
+    if (-not (Test-Path $electronRuntime)) {
+        throw "Electron runtime not found under '$($electronRuntime)'. Run 'npm install' in the ui directory."
+    }
+    Copy-Item (Join-Path $electronRuntime "*") $runtimeStage -Recurse -Force
+}
+
 $vsInfo = Get-VSGenerator -OverrideGenerator $Generator
 $script:vsInstallPath = $vsInfo.Path
 Ensure-BuildDirectory -Path $buildDir -GeneratorName $vsInfo.Generator
@@ -317,6 +360,7 @@ Invoke-ProcessChecked -FilePath "cmake" -Arguments "--build `"$buildDir`" --conf
 
 Write-Host "Building Ionic/Electron shell..." -ForegroundColor Cyan
 $uiDir = Join-Path $repoRoot "ui"
+$guiStageRoot = Join-Path $buildDir "gui_stage"
 $shouldBuildUi = $true
 if ($env:PARANOID_BUILD_UI) {
     if ($env:PARANOID_BUILD_UI -in @("0","false","False","FALSE")) {
@@ -332,13 +376,21 @@ if ($shouldBuildUi) {
         $npmPath = $npmCmd.Source
         Invoke-ProcessChecked -FilePath $npmPath -Arguments "install" -WorkingDirectory $uiDir
         Invoke-ProcessChecked -FilePath $npmPath -Arguments "run build" -WorkingDirectory $uiDir
+        Write-Host "Staging Electron GUI artifacts..." -ForegroundColor Cyan
+        Sync-GuiArtifacts -UiDirectory $uiDir -StageRoot $guiStageRoot
     }
     else {
         Write-Warning "npm is not available on PATH, skipping UI build. Install Node.js and rerun to build the shell."
+        if (Test-Path $guiStageRoot) {
+            Remove-Item $guiStageRoot -Recurse -Force
+        }
     }
 }
 else {
     Write-Warning "PARANOID_BUILD_UI requested to skip UI build. Set it to 1 (or unset) to include the Ionic/Electron shell."
+    if (Test-Path $guiStageRoot) {
+        Remove-Item $guiStageRoot -Recurse -Force
+    }
 }
 
 if ($RunTests) {

@@ -9,10 +9,12 @@
     "ng:build": "ng build",
     "ng:lint": "ng lint",
     "ng:test": "ng test",
-    "electron:start": "wait-on http://localhost:4200 && electron ./electron/main.js",
+    "electron:start": "wait-on http://localhost:4200 && electron ./electron/main.js --dev-server=http://localhost:4200",
     "electron:build": "npm run ng:build && electron ./electron/main.js",
     "start": "npm-run-all -p ng:serve electron:start",
-    "build": "npm run ng:build -- --configuration production"
+    "build": "npm run ng:build -- --configuration production",
+    "verify:web": "node ./scripts/capture-web.mjs",
+    "verify:electron": "node ./scripts/capture-electron.mjs"
   },
   "dependencies": {
     "@angular/animations": "16.2.12",
@@ -26,6 +28,7 @@
     "@ionic/angular": "7.7.4",
     "ionicons": "7.1.2",
     "rxjs": "7.8.1",
+    "sqlite3": "^5.1.7",
     "tslib": "2.6.2",
     "zone.js": "0.13.3"
   },
@@ -43,6 +46,7 @@
     "karma-jasmine": "5.1.0",
     "karma-jasmine-html-reporter": "2.1.0",
     "npm-run-all": "4.1.5",
+    "playwright": "^1.56.1",
     "sass": "1.69.5",
     "ts-node": "10.9.2",
     "typescript": "5.1.6",

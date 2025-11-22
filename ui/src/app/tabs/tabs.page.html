@@ -1,32 +1,106 @@
-<ion-tabs>
-  <ion-tab-bar slot="bottom">
-    <ion-tab-button tab="dashboard" [routerLink]="['/dashboard']">
-      <ion-icon name="shield-checkmark-outline"></ion-icon>
-      <ion-label>Dashboard</ion-label>
-    </ion-tab-button>
-    <ion-tab-button tab="processes" [routerLink]="['/processes']">
-      <ion-icon name="pulse-outline"></ion-icon>
-      <ion-label>Processes</ion-label>
-    </ion-tab-button>
-    <ion-tab-button tab="integrity" [routerLink]="['/integrity']">
-      <ion-icon name="layers-outline"></ion-icon>
-      <ion-label>Integrity</ion-label>
-    </ion-tab-button>
-    <ion-tab-button tab="intel" [routerLink]="['/intel']">
-      <ion-icon name="analytics-outline"></ion-icon>
-      <ion-label>Intel</ion-label>
-    </ion-tab-button>
-    <ion-tab-button tab="darkweb" [routerLink]="['/darkweb']">
-      <ion-icon name="planet-outline"></ion-icon>
-      <ion-label>Dark Web</ion-label>
-    </ion-tab-button>
-    <ion-tab-button tab="firewall" [routerLink]="['/firewall']">
-      <ion-icon name="shield-half-outline"></ion-icon>
-      <ion-label>Firewall</ion-label>
-    </ion-tab-button>
-    <ion-tab-button tab="system" [routerLink]="['/system']">
-      <ion-icon name="construct-outline"></ion-icon>
-      <ion-label>System</ion-label>
-    </ion-tab-button>
-  </ion-tab-bar>
-</ion-tabs>
+<ion-content fullscreen="true">
+  <div class="command-shell">
+    <section class="command-shell__body">
+      <header class="command-shell__header" *ngIf="activeSection">
+        <div>
+          <p class="eyebrow">Active Surface</p>
+          <h1>{{ activeSection.label }}</h1>
+          <p class="lede">{{ activeSection.description }}</p>
+        </div>
+        <div class="command-shell__metrics">
+          <article class="metric-card" *ngFor="let gauge of gauges">
+            <div class="metric-card__icon">
+              <ion-icon [name]="gauge.icon"></ion-icon>
+            </div>
+            <div class="metric-card__body">
+              <p>{{ gauge.label }}</p>
+              <h3>{{ gauge.value | number: '1.0-0' }}</h3>
+            </div>
+          </article>
+        </div>
+      </header>
+
+      <section class="command-shell__modules" *ngIf="activeSection?.modules?.length">
+        <article class="module-card" *ngFor="let module of activeSection.modules">
+          <div class="module-card__content">
+            <div class="module-card__icon">
+              <ion-icon [name]="module.icon"></ion-icon>
+            </div>
+            <div>
+              <h3>{{ module.title }}</h3>
+              <p>{{ module.description }}</p>
+            </div>
+          </div>
+          <ion-button
+            size="small"
+            fill="clear"
+            color="light"
+            [disabled]="moduleBusy[module.id]"
+            (click)="activateModule(module)"
+          >
+            <ion-icon slot="start" [name]="module.action === 'route' ? 'open-outline' : 'flash-outline'"></ion-icon>
+            <span>{{ module.cta }}</span>
+          </ion-button>
+        </article>
+      </section>
+
+      <section class="command-shell__viewport">
+        <router-outlet></router-outlet>
+      </section>
+
+      <section class="command-shell__feed" *ngIf="commandFeed.length">
+        <div class="feed-title">Live Command Feed</div>
+        <div class="feed-entries">
+          <div class="feed-entry" *ngFor="let entry of commandFeed">
+            <span>{{ entry.timestamp | date: 'shortTime' }}</span>
+            <p>{{ entry.message }}</p>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <aside class="command-shell__nav">
+      <div class="brand-block">
+        <img src="assets/ui/shield.svg" alt="Paranoid Glyph" />
+        <div>
+          <p>Paranoid Antivirus Suite</p>
+          <small>Boston-grade operator console</small>
+        </div>
+      </div>
+      <div class="subscription-card" *ngIf="subscriptionPlan as plan">
+        <div class="subscription-card__title">
+          <ion-icon name="key-outline"></ion-icon>
+          <div>
+            <p>{{ plan.plan }} Plan</p>
+            <small>{{ plan.status | uppercase }} • Seats {{ plan.seats }}</small>
+          </div>
+        </div>
+        <div class="subscription-card__body">
+          <p>Licensed to {{ plan.owner }}</p>
+          <p>Renews {{ plan.expiresAt | date: 'mediumDate' }}</p>
+        </div>
+      </div>
+      <div class="nav-items">
+        <button
+          type="button"
+          *ngFor="let section of sections"
+          class="nav-item"
+          [class.nav-item--active]="section.id === activeSection?.id"
+          (click)="goTo(section)"
+        >
+          <ion-icon [name]="section.icon"></ion-icon>
+          <div>
+            <div class="nav-label">{{ section.label }}</div>
+            <div class="nav-copy">{{ section.description }}</div>
+          </div>
+        </button>
+      </div>
+      <div class="nav-footer">
+        <p>
+          White-label palettes & glyphs live in <code>src/theme/_branding.scss</code>. Swap primaries, typography, or shield icons
+          to ship a bespoke brand in minutes.
+        </p>
+      </div>
+    </aside>
+  </div>
+</ion-content>

@@ -1,16 +1,214 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
+const { QuantumProfileVault } = require('./profile-vault');
 
-const isDev = !app.isPackaged;
+let logFilePath;
+function safeJson(payload) {
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return String(payload);
+  }
+}
+
+function logEvent(message, details) {
+  const timestamp = new Date().toISOString();
+  const suffix = details ? ` ${safeJson(details)}` : '';
+  const line = `[${timestamp}] ${message}${suffix}`;
+  console.log(`[paranoid-electron] ${line}`);
+  try {
+    if (!logFilePath) {
+      try {
+        logFilePath = path.join(app.getPath('userData'), 'paranoid-electron.log');
+      } catch {
+        logFilePath = path.join(process.cwd(), 'paranoid-electron.log');
+      }
+    }
+    fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
+    fs.appendFileSync(logFilePath, `${line}\n`);
+  } catch {
+    // ignore file logging errors
+  }
+}
+
 const streams = new Map();
 let windowRef;
+let profileVault;
+let tray;
+let staticServer;
+let staticServerPort;
+let staticServerRoot;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.paranoidlabs.antivirus');
+}
 
-function resolveFrontendPath() {
-  if (isDev) {
-    return 'http://localhost:4200';
+process.on('uncaughtException', (error = {}) => {
+  logEvent('uncaught-exception', { message: error.message, stack: error.stack });
+});
+
+process.on('unhandledRejection', (reason) => {
+  logEvent('unhandled-rejection', { reason: reason instanceof Error ? reason.message : reason });
+});
+
+const devServerArgument = process.argv.find((value) => value.startsWith('--dev-server'));
+const explicitDevServerUrl = devServerArgument && devServerArgument.includes('=')
+  ? devServerArgument.split('=').slice(1).join('=')
+  : undefined;
+const fallbackDevServerUrl = process.env.ELECTRON_START_URL
+  || process.env.PARANOID_UI_DEVSERVER
+  || 'http://localhost:4200';
+const devServerUrl = explicitDevServerUrl || fallbackDevServerUrl;
+const forceDevServer = Boolean(devServerArgument) || process.env.PARANOID_UI_FORCE_DEV === '1';
+
+function resolveBundledIndex() {
+  const distRoot = path.resolve(process.env.PARANOID_UI_DIST || path.join(__dirname, '..', 'dist', 'paranoid-av-ui'));
+  const candidates = [
+    path.join(distRoot, 'browser', 'index.html'),
+    path.join(distRoot, 'index.html')
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate));
+}
+
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const map = {
+    '.html': 'text/html',
+    '.js': 'text/javascript',
+    '.mjs': 'text/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.ico': 'image/x-icon',
+    '.txt': 'text/plain',
+    '.woff2': 'font/woff2',
+    '.woff': 'font/woff',
+    '.ttf': 'font/ttf',
+    '.map': 'application/json',
+    '.webp': 'image/webp'
+  };
+  return map[ext] || 'application/octet-stream';
+}
+
+function serveStaticRequest(rootDir, req, res) {
+  try {
+    const safeRoot = path.resolve(rootDir);
+    const method = (req.method || 'GET').toUpperCase();
+    if (!['GET', 'HEAD'].includes(method)) {
+      res.writeHead(405, { 'Content-Type': 'text/plain' });
+      res.end('Method not allowed');
+      return;
+    }
+    const requestUrl = new URL(req.url || '/', 'http://localhost');
+    let relativePath = decodeURIComponent(requestUrl.pathname || '/');
+    if (relativePath.endsWith('/')) {
+      relativePath = `${relativePath}index.html`;
+    }
+    relativePath = relativePath.replace(/^[/\\]+/, '');
+    if (!relativePath) {
+      relativePath = 'index.html';
+    }
+    let targetPath = path.resolve(safeRoot, relativePath);
+    if (!targetPath.startsWith(safeRoot)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden');
+      return;
+    }
+    if (!fs.existsSync(targetPath) || fs.statSync(targetPath).isDirectory()) {
+      targetPath = path.join(safeRoot, 'index.html');
+    }
+    if (!fs.existsSync(targetPath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': getMimeType(targetPath),
+      'Cache-Control': 'no-cache'
+    });
+    if (method === 'HEAD') {
+      res.end();
+      return;
+    }
+    fs.createReadStream(targetPath)
+      .on('error', (error) => {
+        logEvent('static-server:stream-error', { message: error.message });
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Server error');
+      })
+      .pipe(res);
+  } catch (error) {
+    logEvent('static-server:error', { message: error.message });
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end('Server error');
   }
-  return `file://${path.join(__dirname, '..', 'dist', 'paranoid-av-ui', 'browser', 'index.html')}`;
+}
+
+function startStaticServer(rootDir) {
+  return new Promise((resolve, reject) => {
+    try {
+      const server = http.createServer((req, res) => serveStaticRequest(rootDir, req, res));
+      server.on('error', (error) => {
+        logEvent('static-server:start-error', { message: error.message });
+        reject(error);
+      });
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        staticServer = server;
+        staticServerRoot = rootDir;
+        staticServerPort = address && typeof address === 'object' ? address.port : undefined;
+        logEvent('static-server:listening', { port: staticServerPort });
+        resolve(staticServerPort);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function ensureStaticServer(rootDir) {
+  if (staticServer && staticServerRoot !== rootDir) {
+    try {
+      staticServer.close();
+    } catch {
+      /* ignore */
+    }
+    staticServer = undefined;
+    staticServerPort = undefined;
+    staticServerRoot = undefined;
+  }
+  if (staticServerPort && staticServer) {
+    return staticServerPort;
+  }
+  return startStaticServer(rootDir);
+}
+
+async function resolveFrontendUrl() {
+  const bundledIndex = resolveBundledIndex();
+  if (forceDevServer || (!bundledIndex && !app.isPackaged)) {
+    return devServerUrl;
+  }
+  if (!bundledIndex) {
+    return devServerUrl;
+  }
+  const rootDir = path.resolve(path.dirname(bundledIndex));
+  try {
+    const port = await ensureStaticServer(rootDir);
+    return `http://127.0.0.1:${port}/index.html`;
+  } catch (error) {
+    logEvent('static-server:fallback', { message: error?.message ?? String(error) });
+    return pathToFileURL(bundledIndex).toString();
+  }
 }
 
 function resolveBackendBinary() {
@@ -21,7 +219,34 @@ function resolveBackendBinary() {
   return process.platform === 'win32' ? `${localPath}.exe` : localPath;
 }
 
-function createWindow() {
+function attachWindowDiagnostics(targetWindow) {
+  if (!targetWindow) {
+    return;
+  }
+  const contents = targetWindow.webContents;
+  contents.on('did-start-loading', () => logEvent('renderer:did-start-loading'));
+  contents.on('did-stop-loading', () => logEvent('renderer:did-stop-loading'));
+  contents.on('did-finish-load', () => logEvent('renderer:did-finish-load'));
+  contents.on('dom-ready', () => logEvent('renderer:dom-ready'));
+  contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    logEvent('renderer:did-fail-load', {
+      errorCode,
+      errorDescription,
+      validatedURL,
+      isMainFrame
+    });
+  });
+  contents.on('console-message', (_event, level, message, line, sourceId) => {
+    logEvent('renderer:console-message', { level, message, line, sourceId });
+  });
+  contents.on('render-process-gone', (_event, details) => {
+    logEvent('renderer:process-gone', details);
+  });
+  targetWindow.on('unresponsive', () => logEvent('window:unresponsive'));
+  targetWindow.on('responsive', () => logEvent('window:responsive'));
+}
+
+async function createWindow() {
   windowRef = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -34,11 +259,120 @@ function createWindow() {
     }
   });
 
-  windowRef.loadURL(resolveFrontendPath());
+  attachWindowDiagnostics(windowRef);
+  windowRef.on('closed', () => {
+    logEvent('window:closed');
+    windowRef = undefined;
+  });
 
-  if (isDev) {
+  try {
+    const targetEntry = await resolveFrontendUrl();
+    logEvent('renderer:load-entry', {
+      entry: targetEntry,
+      packaged: app.isPackaged,
+      forceDevServer
+    });
+    await windowRef.loadURL(targetEntry);
+  } catch (error) {
+    logEvent('renderer:load-entry-failed', { message: error?.message ?? String(error) });
+  }
+
+  if (forceDevServer) {
     windowRef.webContents.openDevTools({ mode: 'detach' });
   }
+}
+
+function ensureProfileVault() {
+  if (!profileVault) {
+    const userPath = app.getPath('userData');
+    const machineRoot = getMachineVaultRoot();
+    profileVault = new QuantumProfileVault(userPath, machineRoot);
+  }
+  return profileVault;
+}
+
+function getMachineVaultRoot() {
+  const programData = process.env.PROGRAMDATA;
+  if (programData) {
+    return path.join(programData, 'ParanoidAntivirusSuite');
+  }
+  return path.join(app.getPath('appData'), 'ParanoidAntivirusSuite');
+}
+
+function getAutoLaunchSentinelPath() {
+  return path.join(app.getPath('userData'), 'auto-launch.json');
+}
+
+function getAutoLaunchState() {
+  const settings = app.getLoginItemSettings();
+  return Boolean(settings?.openAtLogin);
+}
+
+function setAutoLaunchState(enabled) {
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    enabled,
+    path: process.execPath
+  });
+}
+
+function registerAutoLaunch() {
+  try {
+    const sentinel = getAutoLaunchSentinelPath();
+    if (!fs.existsSync(sentinel)) {
+      setAutoLaunchState(true);
+      fs.writeFileSync(sentinel, JSON.stringify({ configuredAt: new Date().toISOString() }));
+    }
+  } catch {
+    // ignore if filesystem unavailable
+  }
+}
+
+function resolveIconPath() {
+  const candidates = [
+    path.join(__dirname, '..', 'dist', 'paranoid-av-ui', 'assets', 'ui', 'shield.ico'),
+    path.join(__dirname, '..', 'assets', 'ui', 'shield.ico'),
+    path.join(__dirname, '..', 'src', 'assets', 'ui', 'shield.ico'),
+    path.join(process.resourcesPath || path.join(__dirname, '..'), 'shield.ico')
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
+}
+
+function createTray() {
+  const icon = nativeImage.createFromPath(resolveIconPath());
+  tray = new Tray(icon);
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Paranoid Console',
+      click: () => {
+        if (!windowRef) {
+          createWindow().catch((error) => {
+            logEvent('window:create-failed', { message: error?.message ?? String(error) });
+          });
+        } else {
+          windowRef.show();
+          windowRef.focus();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => app.quit()
+    }
+  ]);
+  tray.setToolTip('Paranoid Antivirus Suite');
+  tray.setContextMenu(contextMenu);
+  tray.on('click', () => {
+    if (!windowRef) {
+      createWindow().catch((error) => {
+        logEvent('window:create-failed', { message: error?.message ?? String(error) });
+      });
+      return;
+    }
+    windowRef.show();
+    windowRef.focus();
+  });
 }
 
 function sendStream(channel, payload) {
@@ -438,6 +772,35 @@ ipcMain.handle('command:usb-build', async (_event, payload = {}) => {
   return { log: output.trim() };
 });
 
+ipcMain.handle('profile:load', async () => {
+  const record = ensureProfileVault().loadUserProfile();
+  return record?.profile ?? null;
+});
+
+ipcMain.handle('profile:save', async (_event, payload = {}) => {
+  ensureProfileVault().saveUserProfile(payload);
+  return { success: true };
+});
+
+ipcMain.handle('subscription:load', async () => {
+  const record = ensureProfileVault().loadSubscription();
+  return record?.subscription ?? null;
+});
+
+ipcMain.handle('subscription:save', async (_event, payload = {}) => {
+  ensureProfileVault().saveSubscription(payload);
+  return { success: true };
+});
+
+ipcMain.handle('app:auto-launch:get', async () => {
+  return getAutoLaunchState();
+});
+
+ipcMain.handle('app:auto-launch:set', async (_event, enabled) => {
+  setAutoLaunchState(Boolean(enabled));
+  return { enabled: getAutoLaunchState() };
+});
+
 ipcMain.handle('stream:start', async (_event, payload = {}) => {
   const name = payload.name;
   const token = `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -500,18 +863,55 @@ ipcMain.on('window:ready', () => {
   sendStream('log', 'UI ready to receive telemetry.');
 });
 
+app.on('second-instance', () => {
+  logEvent('app:second-instance');
+  if (windowRef) {
+    if (windowRef.isMinimized()) {
+      windowRef.restore();
+    }
+    windowRef.show();
+    windowRef.focus();
+  } else {
+    createWindow().catch((error) => {
+      logEvent('window:create-failed', { message: error?.message ?? String(error) });
+    });
+  }
+});
+
 app.whenReady().then(() => {
-  createWindow();
+  logEvent('app:ready', { hasSingleInstanceLock });
+  createWindow().catch((error) => {
+    logEvent('window:create-failed', { message: error?.message ?? String(error) });
+  });
+  createTray();
+  registerAutoLaunch();
 
   app.on('activate', () => {
+    logEvent('app:activate');
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow().catch((error) => {
+        logEvent('window:create-failed', { message: error?.message ?? String(error) });
+      });
     }
   });
 });
 
 app.on('window-all-closed', () => {
+  logEvent('app:window-all-closed');
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('quit', (_event, exitCode) => {
+  logEvent('app:quit', { exitCode });
+  if (staticServer) {
+    try {
+      staticServer.close();
+    } catch {
+      /* ignore */
+    }
+    staticServer = undefined;
+    staticServerPort = undefined;
   }
 });

@@ -1,0 +1,116 @@
+<div class="profile-shell">
+  <section class="profile-hero">
+    <div>
+      <p class="eyebrow">Client identity</p>
+      <h2>Human context for autonomous defense</h2>
+      <p>
+        Capture decision makers, brand tone, and high-value keywords. Everything is sealed in a quantum-safe, AES-256-GCM
+        encrypted SQLite payload that rides with the installer so white-label partners can deploy without touching our cloud.
+      </p>
+    </div>
+    <div class="hero-badge">
+      <ion-icon name="lock-closed-outline"></ion-icon>
+      Quantum Safe Vault
+    </div>
+  </section>
+
+  <form class="profile-form" [formGroup]="form" (ngSubmit)="save()">
+    <div class="profile-grid">
+      <div class="form-card">
+        <h3>Contact Persona</h3>
+        <ion-item>
+          <ion-label position="stacked">Full Name</ion-label>
+          <ion-input formControlName="fullName" placeholder="Jane Operator"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Organization</ion-label>
+          <ion-input formControlName="organization" placeholder="Paranoid Security Labs"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Email</ion-label>
+          <ion-input formControlName="email" placeholder="noc@customer.tld"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Phone</ion-label>
+          <ion-input formControlName="phone" placeholder="+1 555-0100"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Persona Notes</ion-label>
+          <ion-textarea formControlName="persona" auto-grow="true" placeholder="Preferred escalation format, board updates, etc."></ion-textarea>
+        </ion-item>
+      </div>
+
+      <div class="form-card">
+        <h3>Engagement Mode</h3>
+        <ion-item>
+          <ion-label position="stacked">Alerting Level</ion-label>
+          <ion-select formControlName="alertingLevel">
+            <ion-select-option value="full">Full telemetry & SMS</ion-select-option>
+            <ion-select-option value="concierge">Concierge triage</ion-select-option>
+            <ion-select-option value="quiet">Quiet / SOC-only</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Dark Web Host</ion-label>
+          <ion-input formControlName="darkwebHost" placeholder="exampleonion.onion"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Dark Web Path</ion-label>
+          <ion-input formControlName="darkwebPath" placeholder="/search"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Hidden Service Port</ion-label>
+          <ion-input type="number" formControlName="darkwebServicePort"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Tor Proxy Port</ion-label>
+          <ion-input type="number" formControlName="torProxyPort"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">USB Device Hint</ion-label>
+          <ion-input formControlName="usbDeviceHint" placeholder="E:"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">USB Workdir</ion-label>
+          <ion-input formControlName="usbWorkdir" placeholder="C:\FieldKits"></ion-input>
+        </ion-item>
+        <div class="auto-launch-block">
+          <ion-item lines="none">
+            <ion-label>Launch at sign-in</ion-label>
+            <ion-toggle formControlName="autoLaunch" color="success"></ion-toggle>
+          </ion-item>
+          <ion-text color="medium">
+            Keep the console resident after login so the system tray watchdog stays active.
+          </ion-text>
+        </div>
+        <div class="keywords-panel">
+          <div class="keywords-header">
+            <div>
+              <p class="section-title">Dark web keywords</p>
+              <p>Accounts, SSNs, email aliases, infrastructure, license plates.</p>
+            </div>
+            <ion-button fill="clear" size="small" (click)="addKeyword('')">
+              <ion-icon slot="start" name="add-circle-outline"></ion-icon>
+              Add keyword
+            </ion-button>
+          </div>
+          <div class="keywords-list">
+            <div class="keyword-chip" *ngFor="let control of keywords.controls; let i = index">
+              <ion-input [formControl]="control" placeholder="keyword or pattern"></ion-input>
+              <ion-button fill="clear" color="medium" size="small" (click)="removeKeyword(i)">
+                <ion-icon slot="icon-only" name="close-outline"></ion-icon>
+              </ion-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-actions">
+      <ion-button type="submit" expand="block" class="wide-button">Save profile</ion-button>
+      <div class="profile-status" *ngIf="status" [class.profile-status--success]="status.tone === 'success'" [class.profile-status--danger]="status.tone === 'danger'">
+        {{ status.message }}
+      </div>
+    </div>
+  </form>
+</div>

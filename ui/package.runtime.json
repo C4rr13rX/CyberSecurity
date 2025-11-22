@@ -1,0 +1,8 @@
+{
+  "name": "paranoid-av-gui",
+  "version": "1.0.0",
+  "productName": "Paranoid Antivirus Suite",
+  "description": "Desktop console for the Paranoid Antivirus sensor",
+  "main": "electron/main.js",
+  "author": "Paranoid Security Labs"
+}
